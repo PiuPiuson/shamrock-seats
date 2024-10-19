@@ -20,7 +20,7 @@ services:
     networks:
       - botnet
     ports:
-      - "4444:4444"  
+      - "4444:4444"
     shm_size: '2gb'
 
 networks:

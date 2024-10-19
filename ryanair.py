@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 
 
 class Ryanair:
-    def __init__(self):
-        self.driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+    def __init__(self, web_driver):
+        self.driver = web_driver
         self.num_passengers = 25
 
     @staticmethod
@@ -260,11 +260,6 @@ class Ryanair:
         add_fast_track_button.click()
         logger.info("Added fast track.")
 
-    def quit(self):
-        """Quit the WebDriver."""
-        self.driver.quit()
-        logger.info("WebDriver closed.")
-
     def run(
         self,
         date: str,
@@ -274,9 +269,6 @@ class Ryanair:
         target_seat: str,
     ):
         """Run the bot with specified parameters."""
-        try:
-            self.first_page(date, origin, destination, flight_number)
-            self.select_seats_page(target_seat)
-            time.sleep(50)  # Adjust as necessary
-        finally:
-            self.quit()
+
+        self.first_page(date, origin, destination, flight_number)
+        self.select_seats_page(target_seat)

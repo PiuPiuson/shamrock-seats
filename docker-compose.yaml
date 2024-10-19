@@ -1,0 +1,30 @@
+version: "3.8"
+services:
+  shamrock_seats_bot:
+    build: .
+    container_name: shamrock_seats_bot
+    restart: always
+    environment:
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
+      SELENIUM_URL: "http://selenium:4444/wd/hub"
+    volumes:
+      - .:/app
+    networks:
+      - botnet
+    depends_on:
+      - selenium
+
+  selenium:
+    image: selenium/standalone-chromium
+    container_name: selenium
+    networks:
+      - botnet
+    ports:
+      - "4444:4444"  
+    shm_size: '2gb'
+
+networks:
+  botnet:
+    driver: bridge
+
+    

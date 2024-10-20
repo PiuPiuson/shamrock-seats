@@ -1,6 +1,7 @@
 import logging
 import random
 import string
+import time
 from typing import List
 
 from selenium.common.exceptions import (
@@ -52,9 +53,9 @@ class Ryanair:
     def accept_cookies(self):
         """Accept cookies on the website."""
         try:
-            accept_button = WebDriverWait(self.driver, self.TIMEOUT).until(
+            accept_button = WebDriverWait(self.driver, 2).until(
                 EC.element_to_be_clickable(
-                    (By.CSS_SELECTOR, '[data-ref="cookie.accept-all"]')
+                    (By.CSS_SELECTOR, '[data-ref="cookie.no-thanks"]')
                 )
             )
             accept_button.click()
@@ -146,9 +147,8 @@ class Ryanair:
         """Open the search page with the given parameters."""
         search_url = self.generate_search_url(date, origin, destination, people)
         self.driver.get(search_url)
-        logger.info("Opened search page.")
 
-    def find_available_seats(self, date, origin, destination, flight_number: str):
+    def find_max_tickets_available(self, date, origin, destination, flight_number: str):
         """Find the maximum number of available seats for the specified flight."""
         while self.num_passengers > 0:
             self.open_search_page(date, origin, destination, self.num_passengers)
@@ -184,11 +184,20 @@ class Ryanair:
     def select_fare(self):
         """Select the recommended fare."""
         try:
-            recommended_fare = WebDriverWait(self.driver, self.TIMEOUT).until(
+            WebDriverWait(self.driver, self.TIMEOUT).until(
                 EC.presence_of_element_located(
                     (By.CSS_SELECTOR, ".fare-table__fare-column-border--recommended")
                 )
             )
+
+            recommended_fare = WebDriverWait(self.driver, self.TIMEOUT).until(
+                EC.element_to_be_clickable(
+                    (By.CSS_SELECTOR, ".fare-table__fare-column-border--recommended")
+                )
+            )
+
+            time.sleep(2)
+
             recommended_fare.click()
             logger.info("Selected recommended fare.")
         except (
@@ -276,7 +285,7 @@ class Ryanair:
             logger.error("Seatmap did not load in time: %s", e)
             raise
 
-    def get_available_seats(self) -> List[str]:
+    def _get_available_seats_from_seatmap(self) -> List[str]:
         """Get a list of available seat IDs."""
         seats = self.driver.find_elements(
             By.CSS_SELECTOR, ".seatmap__seat:not([class*='unavailable'])"
@@ -286,26 +295,18 @@ class Ryanair:
             seat_id = seat.get_attribute("id")
             if seat_id:
                 available_seats.append(seat_id)
-        logger.info("There are %d available seats.", len(available_seats))
-        return available_seats
 
-    def select_seats(self, available_seats: List[str], target_seat: str):
-        """Select seats for all passengers, excluding the target seat."""
-        target_seat_id = f"seat-{target_seat}"
-        if target_seat_id in available_seats:
-            available_seats.remove(target_seat_id)
-        else:
-            raise Exception(f"Target seat {target_seat} not available.")
+        return [seat.replace("seat-", "") for seat in available_seats]
 
-        if len(available_seats) < self.num_passengers:
-            raise Exception("Not enough available seats for all passengers.")
+    def select_seats(self, seats: list[str]):
+        """Select seats from seatmap"""
 
-        for i in range(self.num_passengers):
-            seat_id = available_seats[i]
+        for seat in seats:
+            seat_id = f"seat-{seat}"
             try:
                 seat_element = self.driver.find_element(By.CSS_SELECTOR, f"#{seat_id}")
                 self.driver.execute_script("arguments[0].click();", seat_element)
-                logger.info("Selected seat %s for passenger %d.", seat_id, i + 1)
+                logger.info("Selected seat %s", seat)
             except NoSuchElementException as e:
                 logger.error("Error selecting seat %s: %s", seat_id, e)
                 raise
@@ -327,22 +328,12 @@ class Ryanair:
         ) as e:
             raise Exception("Error adding fast track: %s", e)
 
-    def select_seats_page(self, target_seat: str):
-        """Perform actions on the seat selection page."""
-        self.wait_for_seatmap()
-
-        available_seats = self.get_available_seats()
-        logger.debug("Available seats: %s", available_seats)
-
-        self.select_seats(available_seats, target_seat)
-        self.proceed_to_fast_track()
-        self.handle_add_fast_track()
-
-    def handle_search_page(
+    def get_available_seats_in_flight(
         self, date: str, origin: str, destination: str, flight_number: str
     ):
-        """Perform actions on the search page."""
-        self.open_search_page(date, origin, destination)
+        """Returns a list of all available seats in a flight"""
+        self.open_search_page(date, origin, destination, 1)
+        logger.info("Opened search page.")
         self.accept_cookies()
 
         if not self.flights_exist():
@@ -360,9 +351,30 @@ class Ryanair:
             logger.error("Selected flight is sold out.")
             raise Exception("Flight is sold out.")
 
-        # Find maximum available seats
-        logger.info("Finding maximum available seats.")
-        flight_card = self.find_available_seats(
+        self.select_flight(flight_card)
+        self.select_fare()
+        self.login_later()
+        self.fill_passenger_details()
+        self.proceed_to_seats_page()
+
+        self.wait_for_seatmap()
+
+        available_seats = self._get_available_seats_from_seatmap()
+        logger.debug("Available seats: %s", available_seats)
+
+        return available_seats
+
+    def get_number_of_tickets_available(
+        self, date: str, origin: str, destination: str, flight_number: str
+    ):
+        """Returns the number of available tickets in a flight (can be used to select that many seats at once)"""
+        self.open_search_page(date, origin, destination, 1)
+        logger.info("Opened search page.")
+        self.accept_cookies()
+
+        # Find maximum available tickets
+        logger.info("Finding maximum available tickets.")
+        flight_card = self.find_max_tickets_available(
             date, origin, destination, flight_number
         )
         if not flight_card:
@@ -370,12 +382,48 @@ class Ryanair:
             raise Exception("No available seats.")
 
         logger.info("There are %d seats available.", self.num_passengers)
+        return self.num_passengers
+
+    def reserve_seats(
+        self, date: str, origin: str, destination: str, flight_number: str, seats: list
+    ):
+        """Reserves a list of seats from the flight"""
+        self.open_search_page(date, origin, destination, len(seats))
+        logger.info("Opened search page.")
+        self.accept_cookies()
+
+        if not self.flights_exist():
+            logger.error("No flights exist with the given parameters.")
+            raise Exception("No flights available.")
+
+        flight_card = self.get_flight_card(flight_number)
+        if not flight_card:
+            logger.error("Could not find the specified flight.")
+            raise Exception("Flight not found.")
+
+        logger.info("Flight number %s found.", flight_number)
+
+        if self.is_flight_sold_out(flight_card):
+            logger.error("Selected flight is sold out.")
+            raise Exception("Flight is sold out.")
 
         self.select_flight(flight_card)
         self.select_fare()
         self.login_later()
         self.fill_passenger_details()
         self.proceed_to_seats_page()
+
+        self.wait_for_seatmap()
+        available_seats = self._get_available_seats_from_seatmap()
+
+        if not all(elem in available_seats for elem in seats):
+            raise Exception(
+                f"Seat(s) {[elem for elem in available_seats if elem not in seats]} aren't available"
+            )
+
+        self.select_seats(seats)
+        self.proceed_to_fast_track()
+        self.handle_add_fast_track()
 
     def run(
         self,

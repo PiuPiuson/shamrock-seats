@@ -2,6 +2,8 @@ import logging
 import time
 import tempfile
 import math
+import random
+
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
@@ -12,21 +14,43 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def main():
-    # Flight details
-    date = "2024-10-21"
-    origin = "STN"
-    destination = "KRK"
-    flight_number = "FR2362"
-    target_seat = "02B"
-
-    # Initialize a WebDriver to get the list of available seats
+def create_webdriver():
     options = webdriver.ChromeOptions()
     options.add_argument("--incognito")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option("useAutomationExtension", False)
+
+    user_data_dir = tempfile.mkdtemp()
+    options.add_argument(f"--user-data-dir={user_data_dir}")
+
     driver = webdriver.Chrome(
         service=Service(ChromeDriverManager().install()), options=options
     )
-    ra = Ryanair(driver)
+    driver.execute_script(
+        "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+    )
+
+    user_agents = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36",
+    ]
+
+    driver.execute_cdp_cmd(
+        "Network.setUserAgentOverride", {"userAgent": user_agents[0]}
+    )
+
+    return driver
+
+
+def main():
+    # Flight details
+    date = "2024-10-21"
+    origin = "MAN"
+    destination = "BCN"
+    flight_number = "FR7542"
+    target_seat = "02B"
+
+    ra = Ryanair(create_webdriver())
 
     try:
         # Open the search page and accept cookies
@@ -51,12 +75,7 @@ def main():
         # Close the initial driver
         ra.driver.quit()
 
-    options = webdriver.ChromeOptions()
-    options.add_argument("--incognito")
-    driver = webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()), options=options
-    )
-    ra = Ryanair(driver)
+    ra = Ryanair(create_webdriver())
 
     try:
         # Open the search page and accept cookies
@@ -87,19 +106,8 @@ def main():
         try:
             logger.info("Starting session %d", i + 1)
 
-            user_data_dir = tempfile.mkdtemp()
-
-            # Initialize ChromeOptions
-            options = webdriver.ChromeOptions()
-            options.add_argument("--incognito")
-            options.add_argument(f"--user-data-dir={user_data_dir}")
-
-            # Initialize a new WebDriver with unique user profile
-            driver = webdriver.Chrome(
-                service=Service(ChromeDriverManager().install()), options=options
-            )
+            driver = create_webdriver()
             drivers.append(driver)
-
             ra = Ryanair(driver)
 
             num_seats_to_reserve = (

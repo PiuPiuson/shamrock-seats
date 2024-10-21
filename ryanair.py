@@ -21,19 +21,19 @@ logger = logging.getLogger(__name__)
 
 
 class Ryanair:
-    TIMEOUT = 40  # Timeout for WebDriverWait
+    __TIMEOUT = 40  # Timeout for WebDriverWait
 
     def __init__(self, driver: WebDriver):
-        self.driver = driver
-        self.num_passengers = 7
+        self.__driver = driver
+        self.__num_passengers = 7
 
     @staticmethod
-    def generate_random_string(length: int = 6) -> str:
+    def __generate_random_string(length: int = 6) -> str:
         """Generate a random string of specified length."""
         return "".join(random.choices(string.ascii_letters, k=length))
 
     @staticmethod
-    def generate_search_url(
+    def __generate_search_url(
         date: str, origin: str, destination: str, people: int = 1
     ) -> str:
         """Generate the URL to search flights. Date should be 'YYYY-MM-DD'."""
@@ -51,10 +51,10 @@ class Ryanair:
         )
         return base_url + params
 
-    def accept_cookies(self):
+    def __accept_cookies(self):
         """Accept cookies on the website."""
         try:
-            accept_button = WebDriverWait(self.driver, self.TIMEOUT).until(
+            accept_button = WebDriverWait(self.__driver, self.__TIMEOUT).until(
                 EC.element_to_be_clickable(
                     (By.CSS_SELECTOR, '[data-ref="cookie.no-thanks"]')
                 )
@@ -68,10 +68,10 @@ class Ryanair:
         ) as e:
             logger.warning("Cookie acceptance failed: %s", e)
 
-    def flights_exist(self) -> bool:
+    def __flights_exist(self) -> bool:
         """Check if flights exist with the given parameters."""
         try:
-            WebDriverWait(self.driver, self.TIMEOUT).until(
+            WebDriverWait(self.__driver, self.__TIMEOUT).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, ".flight-card"))
             )
             logger.info("Flights are available.")
@@ -80,10 +80,10 @@ class Ryanair:
             logger.info("No flights found.")
             return False
 
-    def get_flight_card(self, flight_number: str):
+    def __get_flight_card(self, flight_number: str):
         """Retrieve the flight card element matching the flight number."""
         try:
-            flight_cards = WebDriverWait(self.driver, self.TIMEOUT).until(
+            flight_cards = WebDriverWait(self.__driver, self.__TIMEOUT).until(
                 EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".flight-card"))
             )
             for card in flight_cards:
@@ -104,7 +104,7 @@ class Ryanair:
             logger.error("Timeout while searching for flight cards.")
             return None
 
-    def is_flight_sold_out(self, flight_card) -> bool:
+    def __is_flight_sold_out(self, flight_card) -> bool:
         """Check if a flight is sold out."""
         try:
             flight_card.find_element(
@@ -114,7 +114,7 @@ class Ryanair:
         except NoSuchElementException:
             return False
 
-    def make_gender_dropdown_selection(self, passenger_card):
+    def __make_gender_dropdown_selection(self, passenger_card):
         """Select 'Mr' from the gender dropdown."""
         try:
             dropdown_toggle = passenger_card.find_element(
@@ -130,48 +130,50 @@ class Ryanair:
             logger.error("Error selecting gender: %s", e)
             raise
 
-    def populate_passenger_form(self, passenger_card):
+    def __populate_passenger_form(self, passenger_card):
         """Populate the name and surname fields with random data."""
         try:
             inputs = passenger_card.find_elements(
                 By.CSS_SELECTOR, "input[name*='form.passengers.']"
             )
             for i in inputs:
-                i.send_keys(self.generate_random_string())
+                i.send_keys(self.__generate_random_string())
         except NoSuchElementException as e:
             logger.error("Error populating name form: %s", e)
             raise
 
-    def open_search_page(
+    def __open_search_page(
         self, date: str, origin: str, destination: str, people: int = 1
     ):
         """Open the search page with the given parameters."""
-        search_url = self.generate_search_url(date, origin, destination, people)
-        self.driver.get(search_url)
+        search_url = self.__generate_search_url(date, origin, destination, people)
+        self.__driver.get(search_url)
 
-    def find_max_tickets_available(self, date, origin, destination, flight_number: str):
+    def __find_max_tickets_available(
+        self, date, origin, destination, flight_number: str
+    ):
         """Find the maximum number of available seats for the specified flight."""
-        while self.num_passengers > 0:
-            self.open_search_page(date, origin, destination, self.num_passengers)
-            flight_card = self.get_flight_card(flight_number)
+        while self.__num_passengers > 0:
+            self.__open_search_page(date, origin, destination, self.__num_passengers)
+            flight_card = self.__get_flight_card(flight_number)
             if not flight_card:
                 logger.error("Could not find the specified flight.")
                 return None
-            if self.is_flight_sold_out(flight_card):
-                self.num_passengers -= 1
-                logger.info("Reducing passenger count to %d", self.num_passengers)
+            if self.__is_flight_sold_out(flight_card):
+                self.__num_passengers -= 1
+                logger.info("Reducing passenger count to %d", self.__num_passengers)
             else:
                 logger.info(
-                    "Found available seats for %d passengers.", self.num_passengers
+                    "Found available seats for %d passengers.", self.__num_passengers
                 )
                 return flight_card
         logger.error("No available seats found.")
         return None
 
-    def select_flight(self, flight_card):
+    def __select_flight(self, flight_card):
         """Select the specified flight."""
         try:
-            select_button = WebDriverWait(flight_card, self.TIMEOUT).until(
+            select_button = WebDriverWait(flight_card, self.__TIMEOUT).until(
                 EC.presence_of_element_located(
                     (By.CSS_SELECTOR, ".flight-card-summary__select-btn")
                 )
@@ -183,16 +185,16 @@ class Ryanair:
             logger.error("Error selecting flight: %s", e)
             raise
 
-    def select_fare(self):
+    def __select_fare(self):
         """Select the recommended fare."""
         try:
-            recommended_fare = WebDriverWait(self.driver, self.TIMEOUT).until(
+            recommended_fare = WebDriverWait(self.__driver, self.__TIMEOUT).until(
                 EC.presence_of_element_located(
                     (By.CSS_SELECTOR, ".fare-table__recommended-tag")
                 )
             )
 
-            actions = ActionChains(self.driver)
+            actions = ActionChains(self.__driver)
             actions.move_to_element(recommended_fare).move_by_offset(
                 50, 20
             ).click().perform()
@@ -207,10 +209,10 @@ class Ryanair:
             logger.error("Error selecting fare: %s", e)
             raise
 
-    def login_later(self):
+    def __select_login_later(self):
         """Proceed without logging in."""
         try:
-            login_later_button = WebDriverWait(self.driver, self.TIMEOUT).until(
+            login_later_button = WebDriverWait(self.__driver, self.__TIMEOUT).until(
                 EC.presence_of_element_located(
                     (By.CSS_SELECTOR, ".login-touchpoint__login-later")
                 )
@@ -225,10 +227,10 @@ class Ryanair:
             logger.error("Error clicking 'Login Later' button: %s", e)
             raise
 
-    def fill_passenger_details(self):
+    def __fill_passenger_details(self):
         """Fill in passenger details."""
         try:
-            passenger_forms = WebDriverWait(self.driver, self.TIMEOUT).until(
+            passenger_forms = WebDriverWait(self.__driver, self.__TIMEOUT).until(
                 EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".passenger"))
             )
             passenger_forms_data_ref = [
@@ -236,20 +238,20 @@ class Ryanair:
             ]
 
             for data_ref in passenger_forms_data_ref:
-                form = self.driver.find_element(
+                form = self.__driver.find_element(
                     By.CSS_SELECTOR, f'div[data-ref="{data_ref}"]'
                 )
-                self.make_gender_dropdown_selection(form)
-                self.populate_passenger_form(form)
+                self.__make_gender_dropdown_selection(form)
+                self.__populate_passenger_form(form)
             logger.info("Populated passenger details.")
         except (TimeoutException, NoSuchElementException) as e:
             logger.error("Error filling passenger details: %s", e)
             raise
 
-    def proceed_to_seats_page(self):
+    def __proceed_to_seats_page(self):
         """Click on the continue button to proceed to seats page."""
         try:
-            continue_button = WebDriverWait(self.driver, self.TIMEOUT).until(
+            continue_button = WebDriverWait(self.__driver, self.__TIMEOUT).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, ".continue-flow__button"))
             )
             continue_button.click()
@@ -262,10 +264,10 @@ class Ryanair:
             logger.error("Error proceeding to seats page: %s", e)
             raise
 
-    def proceed_to_fast_track(self):
+    def __proceed_to_fast_track(self):
         """Click on the continue button to proceed to fast track selection."""
         try:
-            continue_button = WebDriverWait(self.driver, self.TIMEOUT).until(
+            continue_button = WebDriverWait(self.__driver, self.__TIMEOUT).until(
                 EC.element_to_be_clickable(
                     (By.CSS_SELECTOR, ".passenger-carousel__cta--next")
                 )
@@ -280,10 +282,10 @@ class Ryanair:
             logger.error("Error proceeding to fast track selection: %s", e)
             raise
 
-    def wait_for_seatmap(self):
+    def __wait_for_seatmap(self):
         """Wait until the seatmap is loaded."""
         try:
-            WebDriverWait(self.driver, self.TIMEOUT).until(
+            WebDriverWait(self.__driver, self.__TIMEOUT).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, ".seatmap__seat"))
             )
             logger.info("Seatmap is loaded.")
@@ -291,9 +293,9 @@ class Ryanair:
             logger.error("Seatmap did not load in time: %s", e)
             raise
 
-    def _get_available_seats_from_seatmap(self) -> List[str]:
+    def __get_available_seats_from_seatmap(self) -> List[str]:
         """Get a list of available seat IDs."""
-        seats = self.driver.find_elements(
+        seats = self.__driver.find_elements(
             By.CSS_SELECTOR, ".seatmap__seat:not([class*='unavailable'])"
         )
         available_seats = []
@@ -304,23 +306,25 @@ class Ryanair:
 
         return [seat.replace("seat-", "") for seat in available_seats]
 
-    def select_seats(self, seats: list[str]):
+    def __select_seats(self, seats: list[str]):
         """Select seats from seatmap"""
 
         for seat in seats:
             seat_id = f"seat-{seat}"
             try:
-                seat_element = self.driver.find_element(By.CSS_SELECTOR, f"#{seat_id}")
-                self.driver.execute_script("arguments[0].click();", seat_element)
+                seat_element = self.__driver.find_element(
+                    By.CSS_SELECTOR, f"#{seat_id}"
+                )
+                self.__driver.execute_script("arguments[0].click();", seat_element)
                 logger.info("Selected seat %s", seat)
             except NoSuchElementException as e:
                 logger.error("Error selecting seat %s: %s", seat_id, e)
                 raise
 
-    def handle_add_fast_track(self):
+    def __handle_add_fast_track(self):
         """Handle the fast track page."""
         try:
-            add_fast_track_button = WebDriverWait(self.driver, self.TIMEOUT).until(
+            add_fast_track_button = WebDriverWait(self.__driver, self.__TIMEOUT).until(
                 EC.element_to_be_clickable(
                     (By.CSS_SELECTOR, ".enhanced-takeover-beta__product-confirm-cta")
                 )
@@ -338,34 +342,34 @@ class Ryanair:
         self, date: str, origin: str, destination: str, flight_number: str
     ):
         """Returns a list of all available seats in a flight"""
-        self.open_search_page(date, origin, destination, 1)
+        self.__open_search_page(date, origin, destination, 1)
         logger.info("Opened search page.")
-        self.accept_cookies()
+        self.__accept_cookies()
 
-        if not self.flights_exist():
+        if not self.__flights_exist():
             logger.error("No flights exist with the given parameters.")
             raise Exception("No flights available.")
 
-        flight_card = self.get_flight_card(flight_number)
+        flight_card = self.__get_flight_card(flight_number)
         if not flight_card:
             logger.error("Could not find the specified flight.")
             raise Exception("Flight not found.")
 
         logger.info("Flight number %s found.", flight_number)
 
-        if self.is_flight_sold_out(flight_card):
+        if self.__is_flight_sold_out(flight_card):
             logger.error("Selected flight is sold out.")
             raise Exception("Flight is sold out.")
 
-        self.select_flight(flight_card)
-        self.select_fare()
-        self.login_later()
-        self.fill_passenger_details()
-        self.proceed_to_seats_page()
+        self.__select_flight(flight_card)
+        self.__select_fare()
+        self.__select_login_later()
+        self.__fill_passenger_details()
+        self.__proceed_to_seats_page()
 
-        self.wait_for_seatmap()
+        self.__wait_for_seatmap()
 
-        available_seats = self._get_available_seats_from_seatmap()
+        available_seats = self.__get_available_seats_from_seatmap()
         logger.debug("Available seats: %s", available_seats)
 
         return available_seats
@@ -374,76 +378,59 @@ class Ryanair:
         self, date: str, origin: str, destination: str, flight_number: str
     ):
         """Returns the number of available tickets in a flight (can be used to select that many seats at once)"""
-        self.open_search_page(date, origin, destination, 1)
+        self.__open_search_page(date, origin, destination, 1)
         logger.info("Opened search page.")
-        self.accept_cookies()
+        self.__accept_cookies()
 
         # Find maximum available tickets
         logger.info("Finding maximum available tickets.")
-        flight_card = self.find_max_tickets_available(
+        flight_card = self.__find_max_tickets_available(
             date, origin, destination, flight_number
         )
         if not flight_card:
             logger.error("No available seats found.")
             raise Exception("No available seats.")
 
-        logger.info("There are %d seats available.", self.num_passengers)
-        return self.num_passengers
+        logger.info("There are %d seats available.", self.__num_passengers)
+        return self.__num_passengers
 
     def reserve_seats(
         self, date: str, origin: str, destination: str, flight_number: str, seats: list
     ):
         """Reserves a list of seats from the flight"""
-        self.open_search_page(date, origin, destination, len(seats))
+        self.__open_search_page(date, origin, destination, len(seats))
         logger.info("Opened search page.")
-        self.accept_cookies()
+        self.__accept_cookies()
 
-        if not self.flights_exist():
+        if not self.__flights_exist():
             logger.error("No flights exist with the given parameters.")
             raise Exception("No flights available.")
 
-        flight_card = self.get_flight_card(flight_number)
+        flight_card = self.__get_flight_card(flight_number)
         if not flight_card:
             logger.error("Could not find the specified flight.")
             raise Exception("Flight not found.")
 
         logger.info("Flight number %s found.", flight_number)
 
-        if self.is_flight_sold_out(flight_card):
+        if self.__is_flight_sold_out(flight_card):
             logger.error("Selected flight is sold out.")
             raise Exception("Flight is sold out.")
 
-        self.select_flight(flight_card)
-        self.select_fare()
-        self.login_later()
-        self.fill_passenger_details()
-        self.proceed_to_seats_page()
+        self.__select_flight(flight_card)
+        self.__select_fare()
+        self.__select_login_later()
+        self.__fill_passenger_details()
+        self.__proceed_to_seats_page()
 
-        self.wait_for_seatmap()
-        available_seats = self._get_available_seats_from_seatmap()
+        self.__wait_for_seatmap()
+        available_seats = self.__get_available_seats_from_seatmap()
 
         if not all(elem in available_seats for elem in seats):
             raise Exception(
                 f"Seat(s) {[elem for elem in available_seats if elem not in seats]} aren't available"
             )
 
-        self.select_seats(seats)
-        self.proceed_to_fast_track()
-        self.handle_add_fast_track()
-
-    def run(
-        self,
-        date: str,
-        origin: str,
-        destination: str,
-        flight_number: str,
-        target_seat: str,
-    ):
-        """Run the bot with specified parameters."""
-        try:
-            self.handle_search_page(date, origin, destination, flight_number)
-            self.select_seats_page(target_seat)
-            logger.info("Seat reservation process completed successfully.")
-        except Exception as e:
-            logger.error("An error occurred during the seat reservation process: %s", e)
-            raise
+        self.__select_seats(seats)
+        self.__proceed_to_fast_track()
+        self.__handle_add_fast_track()

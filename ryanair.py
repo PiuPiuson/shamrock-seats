@@ -13,6 +13,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.common.action_chains import ActionChains
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -24,7 +25,7 @@ class Ryanair:
 
     def __init__(self, driver: WebDriver):
         self.driver = driver
-        self.num_passengers = 5
+        self.num_passengers = 7
 
     @staticmethod
     def generate_random_string(length: int = 6) -> str:
@@ -53,7 +54,7 @@ class Ryanair:
     def accept_cookies(self):
         """Accept cookies on the website."""
         try:
-            accept_button = WebDriverWait(self.driver, 2).until(
+            accept_button = WebDriverWait(self.driver, self.TIMEOUT).until(
                 EC.element_to_be_clickable(
                     (By.CSS_SELECTOR, '[data-ref="cookie.no-thanks"]')
                 )
@@ -175,6 +176,7 @@ class Ryanair:
                     (By.CSS_SELECTOR, ".flight-card-summary__select-btn")
                 )
             )
+
             select_button.click()
             logger.info("Selected the flight.")
         except (NoSuchElementException, ElementClickInterceptedException) as e:
@@ -184,21 +186,18 @@ class Ryanair:
     def select_fare(self):
         """Select the recommended fare."""
         try:
-            WebDriverWait(self.driver, self.TIMEOUT).until(
-                EC.presence_of_element_located(
-                    (By.CSS_SELECTOR, ".fare-table__fare-column-border--recommended")
-                )
-            )
-
             recommended_fare = WebDriverWait(self.driver, self.TIMEOUT).until(
-                EC.element_to_be_clickable(
-                    (By.CSS_SELECTOR, ".fare-table__fare-column-border--recommended")
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, ".fare-table__recommended-tag")
                 )
             )
 
-            time.sleep(2)
+            actions = ActionChains(self.driver)
+            actions.move_to_element(recommended_fare).move_by_offset(
+                50, 20
+            ).click().perform()
 
-            recommended_fare.click()
+            # recommended_fare.click()
             logger.info("Selected recommended fare.")
         except (
             TimeoutException,
@@ -232,7 +231,14 @@ class Ryanair:
             passenger_forms = WebDriverWait(self.driver, self.TIMEOUT).until(
                 EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".passenger"))
             )
-            for form in passenger_forms:
+            passenger_forms_data_ref = [
+                form.get_attribute("data-ref") for form in passenger_forms
+            ]
+
+            for data_ref in passenger_forms_data_ref:
+                form = self.driver.find_element(
+                    By.CSS_SELECTOR, f'div[data-ref="{data_ref}"]'
+                )
                 self.make_gender_dropdown_selection(form)
                 self.populate_passenger_form(form)
             logger.info("Populated passenger details.")

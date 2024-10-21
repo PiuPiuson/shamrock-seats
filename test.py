@@ -101,13 +101,11 @@ def main():
     target_seat = "01C"
 
     driver = create_webdriver()
-    ra = Ryanair(driver)
+    ra = Ryanair(driver, date, origin, destination, flight_number)
 
     try:
         # Open the search page and accept cookies
-        available_seats = ra.get_available_seats_in_flight(
-            date, origin, destination, flight_number
-        )
+        available_seats = ra.get_available_seats_in_flight()
 
         if target_seat not in available_seats:
             logger.error("Target seat %s is not available", target_seat)
@@ -127,13 +125,11 @@ def main():
         driver.quit()
 
     driver = create_webdriver()
-    ra = Ryanair(driver)
+    ra = Ryanair(driver, date, origin, destination, flight_number)
 
     try:
         # Open the search page and accept cookies
-        available_tickets = ra.get_number_of_tickets_available(
-            date, origin, destination, flight_number
-        )
+        available_tickets = ra.get_number_of_tickets_available()
 
         logger.info(
             "There are %d available tickets in the flight",
@@ -159,13 +155,16 @@ def main():
     seats_remaining = available_seats
 
     drivers = []
+    ras = []
     for i in range(drivers_needed):
         try:
             logger.info("Starting session %d", i + 1)
 
             driver = create_webdriver(use_proxy=True)
             drivers.append(driver)
-            ra = Ryanair(driver)
+
+            ra = Ryanair(driver, date, origin, destination, flight_number)
+            ras.append(ra)
 
             num_seats_to_reserve = (
                 available_tickets
@@ -179,13 +178,7 @@ def main():
 
             seats_to_reserve = seats_remaining[:num_seats_to_reserve]
 
-            ra.reserve_seats(
-                date,
-                origin,
-                destination,
-                flight_number,
-                seats_to_reserve,
-            )
+            ra.reserve_seats(seats_to_reserve)
 
             logger.info("Session %d seats reserved", i + 1)
 
@@ -200,6 +193,12 @@ def main():
             logger.error("An error occurred in session %d: %s", i + 1, e)
             driver.quit()
             raise
+
+    logger.info("Waiting for user to make booking")
+    time.sleep(15)
+
+    for ra in ras:
+        ra.free_reserved_seats()
 
     # Close all WebDriver instances
     for driver in drivers:

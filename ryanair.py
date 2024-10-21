@@ -23,27 +23,36 @@ logger = logging.getLogger(__name__)
 class Ryanair:
     __TIMEOUT = 40  # Timeout for WebDriverWait
 
-    def __init__(self, driver: WebDriver):
+    def __init__(
+        self,
+        driver: WebDriver,
+        date: str,
+        origin: str,
+        destination: str,
+        flight_number: str,
+    ):
         self.__driver = driver
         self.__num_passengers = 7
+
+        self.__date = date
+        self.__origin = origin
+        self.__destination = destination
+        self.__flight_number = flight_number
 
     @staticmethod
     def __generate_random_string(length: int = 6) -> str:
         """Generate a random string of specified length."""
         return "".join(random.choices(string.ascii_letters, k=length))
 
-    @staticmethod
-    def __generate_search_url(
-        date: str, origin: str, destination: str, people: int = 1
-    ) -> str:
+    def __generate_search_url(self, people: int = 1) -> str:
         """Generate the URL to search flights. Date should be 'YYYY-MM-DD'."""
         base_url = "https://www.ryanair.com/gb/en/trip/flights/select"
         params = (
             f"?adults={people}"
             f"&teens=0&children=0&infants=0"
-            f"&dateOut={date}"
-            f"&originIata={origin}"
-            f"&destinationIata={destination}"
+            f"&dateOut={self.__date}"
+            f"&originIata={self.__origin}"
+            f"&destinationIata={self.__destination}"
             f"&isReturn=false"
             f"&discount=0"
             f"&promoCode="
@@ -80,7 +89,7 @@ class Ryanair:
             logger.info("No flights found.")
             return False
 
-    def __get_flight_card(self, flight_number: str):
+    def __get_flight_card(self):
         """Retrieve the flight card element matching the flight number."""
         try:
             flight_cards = WebDriverWait(self.__driver, self.__TIMEOUT).until(
@@ -94,11 +103,11 @@ class Ryanair:
                     flight_number_text = flight_number_element.text.strip().replace(
                         " ", ""
                     )
-                    if flight_number_text == flight_number:
+                    if flight_number_text == self.__flight_number:
                         return card
                 except NoSuchElementException:
                     continue
-            logger.warning("Flight number %s not found.", flight_number)
+            logger.warning("Flight number %s not found.", self.__flight_number)
             return None
         except TimeoutException:
             logger.error("Timeout while searching for flight cards.")
@@ -142,20 +151,16 @@ class Ryanair:
             logger.error("Error populating name form: %s", e)
             raise
 
-    def __open_search_page(
-        self, date: str, origin: str, destination: str, people: int = 1
-    ):
+    def __open_search_page(self, people: int = 1):
         """Open the search page with the given parameters."""
-        search_url = self.__generate_search_url(date, origin, destination, people)
+        search_url = self.__generate_search_url(people)
         self.__driver.get(search_url)
 
-    def __find_max_tickets_available(
-        self, date, origin, destination, flight_number: str
-    ):
+    def __find_max_tickets_available(self):
         """Find the maximum number of available seats for the specified flight."""
         while self.__num_passengers > 0:
-            self.__open_search_page(date, origin, destination, self.__num_passengers)
-            flight_card = self.__get_flight_card(flight_number)
+            self.__open_search_page(self.__num_passengers)
+            flight_card = self.__get_flight_card()
             if not flight_card:
                 logger.error("Could not find the specified flight.")
                 return None
@@ -338,11 +343,9 @@ class Ryanair:
         ) as e:
             raise Exception("Error adding fast track: %s", e)
 
-    def get_available_seats_in_flight(
-        self, date: str, origin: str, destination: str, flight_number: str
-    ):
+    def get_available_seats_in_flight(self):
         """Returns a list of all available seats in a flight"""
-        self.__open_search_page(date, origin, destination, 1)
+        self.__open_search_page(1)
         logger.info("Opened search page.")
         self.__accept_cookies()
 
@@ -350,12 +353,12 @@ class Ryanair:
             logger.error("No flights exist with the given parameters.")
             raise Exception("No flights available.")
 
-        flight_card = self.__get_flight_card(flight_number)
+        flight_card = self.__get_flight_card()
         if not flight_card:
             logger.error("Could not find the specified flight.")
             raise Exception("Flight not found.")
 
-        logger.info("Flight number %s found.", flight_number)
+        logger.info("Flight number %s found.", self.__flight_number)
 
         if self.__is_flight_sold_out(flight_card):
             logger.error("Selected flight is sold out.")
@@ -374,19 +377,15 @@ class Ryanair:
 
         return available_seats
 
-    def get_number_of_tickets_available(
-        self, date: str, origin: str, destination: str, flight_number: str
-    ):
+    def get_number_of_tickets_available(self):
         """Returns the number of available tickets in a flight (can be used to select that many seats at once)"""
-        self.__open_search_page(date, origin, destination, 1)
+        self.__open_search_page(1)
         logger.info("Opened search page.")
         self.__accept_cookies()
 
         # Find maximum available tickets
         logger.info("Finding maximum available tickets.")
-        flight_card = self.__find_max_tickets_available(
-            date, origin, destination, flight_number
-        )
+        flight_card = self.__find_max_tickets_available()
         if not flight_card:
             logger.error("No available seats found.")
             raise Exception("No available seats.")
@@ -394,11 +393,9 @@ class Ryanair:
         logger.info("There are %d seats available.", self.__num_passengers)
         return self.__num_passengers
 
-    def reserve_seats(
-        self, date: str, origin: str, destination: str, flight_number: str, seats: list
-    ):
+    def reserve_seats(self, seats: list):
         """Reserves a list of seats from the flight"""
-        self.__open_search_page(date, origin, destination, len(seats))
+        self.__open_search_page(len(seats))
         logger.info("Opened search page.")
         self.__accept_cookies()
 
@@ -406,12 +403,12 @@ class Ryanair:
             logger.error("No flights exist with the given parameters.")
             raise Exception("No flights available.")
 
-        flight_card = self.__get_flight_card(flight_number)
+        flight_card = self.__get_flight_card()
         if not flight_card:
             logger.error("Could not find the specified flight.")
             raise Exception("Flight not found.")
 
-        logger.info("Flight number %s found.", flight_number)
+        logger.info("Flight number %s found.", self.__flight_number)
 
         if self.__is_flight_sold_out(flight_card):
             logger.error("Selected flight is sold out.")
@@ -434,3 +431,15 @@ class Ryanair:
         self.__select_seats(seats)
         self.__proceed_to_fast_track()
         self.__handle_add_fast_track()
+
+    def __click_ryanair_logo(self):
+        """Clicks the ryanair logo on the top left of the page"""
+        self.__driver.find_element(By.CSS_SELECTOR, ".common-header__logo-icon").click()
+
+    def free_reserved_seats(self):
+        """Frees seats reserved in this session"""
+        logger.info("Freeing seats up")
+        self.__click_ryanair_logo()
+        self.__open_search_page()
+        time.sleep(5)
+        logger.info("Seats freed successfully")

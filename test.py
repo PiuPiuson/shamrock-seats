@@ -100,7 +100,8 @@ def main():
     flight_number = "FR7542"
     target_seat = "01C"
 
-    ra = Ryanair(create_webdriver())
+    driver = create_webdriver()
+    ra = Ryanair(driver)
 
     try:
         # Open the search page and accept cookies
@@ -123,9 +124,10 @@ def main():
         logger.error("An error occurred: %s", e)
     finally:
         # Close the initial driver
-        ra.driver.quit()
+        driver.quit()
 
-    ra = Ryanair(create_webdriver())
+    driver = create_webdriver()
+    ra = Ryanair(driver)
 
     try:
         # Open the search page and accept cookies
@@ -142,7 +144,7 @@ def main():
         logger.error("An error occurred: %s", e)
     finally:
         # Close the initial driver
-        ra.driver.quit()
+        driver.quit()
 
     # Calculate how many drivers we need
     drivers_needed = math.ceil(len(available_seats) / available_tickets)

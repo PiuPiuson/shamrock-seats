@@ -436,10 +436,17 @@ class Ryanair:
         """Clicks the ryanair logo on the top left of the page"""
         self.__driver.find_element(By.CSS_SELECTOR, ".common-header__logo-icon").click()
 
+    def __click_change_flight_button(self):
+        WebDriverWait(self.__driver, self.__TIMEOUT).until(
+            EC.element_to_be_clickable(
+                (By.CSS_SELECTOR, '[data-e2e="change-flight-button"]')
+            )
+        ).click()
+
     def free_reserved_seats(self):
         """Frees seats reserved in this session"""
         logger.info("Freeing seats up")
         self.__click_ryanair_logo()
         self.__open_search_page()
-        time.sleep(5)
+        self.__click_change_flight_button()
         logger.info("Seats freed successfully")

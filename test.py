@@ -195,7 +195,7 @@ def main():
             raise
 
     logger.info("Waiting for user to make booking")
-    time.sleep(15)
+    time.sleep(60)
 
     for ra in ras:
         ra.free_reserved_seats()

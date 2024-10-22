@@ -2,6 +2,7 @@ import logging
 import random
 import string
 import time
+from datetime import datetime, timedelta
 from typing import List
 
 from selenium.common.exceptions import (
@@ -26,31 +27,50 @@ class Ryanair:
     def __init__(
         self,
         driver: WebDriver,
-        date: str,
         origin: str,
         destination: str,
-        flight_number: str,
+        departure_time: str,
     ):
         self.__driver = driver
         self.__num_passengers = 7
-
-        self.__date = date
         self.__origin = origin
         self.__destination = destination
-        self.__flight_number = flight_number
+        self.__departure_time = departure_time
 
     @staticmethod
     def __generate_random_string(length: int = 6) -> str:
         """Generate a random string of specified length."""
         return "".join(random.choices(string.ascii_letters, k=length))
 
-    def __generate_search_url(self, people: int = 1) -> str:
-        """Generate the URL to search flights. Date should be 'YYYY-MM-DD'."""
+    def __generate_departure_date(self) -> str:
+        """
+        Returns today's date or tomorrow's date depending on whether
+        the departure time has passed or not.
+        """
+        input_time = datetime.strptime(self.__departure_time, "%H:%M").time()
+
+        now = datetime.now()
+        today_time = datetime.combine(now.date(), input_time)
+
+        if today_time > now:
+            # Return today's date if the time has not passed
+            departure_date = now.strftime("%Y-%m-%d")
+
+        else:
+            # Return tomorrow's date if the time has passed
+            tomorrow = now + timedelta(days=1)
+            departure_date = tomorrow.strftime("%Y-%m-%d")
+
+        logger.info("Setting departure date to %s", departure_date)
+        return departure_date
+
+    def __generate_search_url(self, passengers: int = 1) -> str:
+        """Generate the URL to search flights."""
         base_url = "https://www.ryanair.com/gb/en/trip/flights/select"
         params = (
-            f"?adults={people}"
+            f"?adults={passengers}"
             f"&teens=0&children=0&infants=0"
-            f"&dateOut={self.__date}"
+            f"&dateOut={self.__generate_departure_date()}"
             f"&originIata={self.__origin}"
             f"&destinationIata={self.__destination}"
             f"&isReturn=false"
@@ -90,24 +110,23 @@ class Ryanair:
             return False
 
     def __get_flight_card(self):
-        """Retrieve the flight card element matching the flight number."""
+        """Retrieve the flight card element matching the flight time."""
         try:
             flight_cards = WebDriverWait(self.__driver, self.__TIMEOUT).until(
                 EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".flight-card"))
             )
             for card in flight_cards:
                 try:
-                    flight_number_element = card.find_element(
-                        By.CSS_SELECTOR, ".card-flight-num__content"
-                    )
-                    flight_number_text = flight_number_element.text.strip().replace(
-                        " ", ""
-                    )
-                    if flight_number_text == self.__flight_number:
+                    departure_time_element = card.find_element(
+                        By.CSS_SELECTOR, '[data-ref="flight-segment.departure"]'
+                    ).find_element(By.CSS_SELECTOR, ".flight-info__hour")
+                    departure_time = departure_time_element.text.strip()
+
+                    if departure_time == self.__departure_time:
                         return card
                 except NoSuchElementException:
                     continue
-            logger.warning("Flight number %s not found.", self.__flight_number)
+            logger.warning("Flight not found.")
             return None
         except TimeoutException:
             logger.error("Timeout while searching for flight cards.")
@@ -151,9 +170,11 @@ class Ryanair:
             logger.error("Error populating name form: %s", e)
             raise
 
-    def __open_search_page(self, people: int = 1):
+    def __open_search_page(self, passengers: int = 1):
         """Open the search page with the given parameters."""
-        search_url = self.__generate_search_url(people)
+        logger.info("Opening search page with %d passenger(s).", passengers)
+
+        search_url = self.__generate_search_url(passengers)
         self.__driver.get(search_url)
 
     def __find_max_tickets_available(self):
@@ -169,7 +190,7 @@ class Ryanair:
                 logger.info("Reducing passenger count to %d", self.__num_passengers)
             else:
                 logger.info(
-                    "Found available seats for %d passengers.", self.__num_passengers
+                    "Found available seats for %d passengers(s).", self.__num_passengers
                 )
                 return flight_card
         logger.error("No available seats found.")
@@ -313,7 +334,6 @@ class Ryanair:
 
     def __select_seats(self, seats: list[str]):
         """Select seats from seatmap"""
-
         for seat in seats:
             seat_id = f"seat-{seat}"
             try:
@@ -346,7 +366,6 @@ class Ryanair:
     def get_available_seats_in_flight(self):
         """Returns a list of all available seats in a flight"""
         self.__open_search_page(1)
-        logger.info("Opened search page.")
         self.__accept_cookies()
 
         if not self.__flights_exist():
@@ -358,7 +377,7 @@ class Ryanair:
             logger.error("Could not find the specified flight.")
             raise Exception("Flight not found.")
 
-        logger.info("Flight number %s found.", self.__flight_number)
+        logger.info("Flight found.")
 
         if self.__is_flight_sold_out(flight_card):
             logger.error("Selected flight is sold out.")
@@ -408,7 +427,7 @@ class Ryanair:
             logger.error("Could not find the specified flight.")
             raise Exception("Flight not found.")
 
-        logger.info("Flight number %s found.", self.__flight_number)
+        logger.info("Flight found.")
 
         if self.__is_flight_sold_out(flight_card):
             logger.error("Selected flight is sold out.")

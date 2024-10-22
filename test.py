@@ -94,22 +94,20 @@ def create_webdriver(use_proxy=False):
 
 def main():
     # Flight details
-    date = "2024-10-21"
-    origin = "MAN"
-    destination = "BCN"
-    flight_number = "FR7542"
-    target_seat = "01C"
+    origin = "STN"
+    destination = "WRO"
+    departure_time = "21:30"
+    target_seat = "02E"
 
     driver = create_webdriver()
-    ra = Ryanair(driver, date, origin, destination, flight_number)
+    ra = Ryanair(driver, origin, destination, departure_time)
 
     try:
         # Open the search page and accept cookies
         available_seats = ra.get_available_seats_in_flight()
 
         if target_seat not in available_seats:
-            logger.error("Target seat %s is not available", target_seat)
-            return
+            raise Exception("Target seat %s is not available", target_seat)
 
         available_seats.remove(target_seat)
 
@@ -120,12 +118,12 @@ def main():
 
     except Exception as e:
         logger.error("An error occurred: %s", e)
+        return
     finally:
-        # Close the initial driver
         driver.quit()
 
     driver = create_webdriver()
-    ra = Ryanair(driver, date, origin, destination, flight_number)
+    ra = Ryanair(driver, origin, destination, departure_time)
 
     try:
         # Open the search page and accept cookies
@@ -138,8 +136,8 @@ def main():
 
     except Exception as e:
         logger.error("An error occurred: %s", e)
+        return
     finally:
-        # Close the initial driver
         driver.quit()
 
     # Calculate how many drivers we need
@@ -163,7 +161,7 @@ def main():
             driver = create_webdriver(use_proxy=True)
             drivers.append(driver)
 
-            ra = Ryanair(driver, date, origin, destination, flight_number)
+            ra = Ryanair(driver, origin, destination, departure_time)
             ras.append(ra)
 
             num_seats_to_reserve = (

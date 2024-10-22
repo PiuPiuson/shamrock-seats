@@ -1,7 +1,6 @@
 import logging
 import random
 import string
-import time
 from datetime import datetime, timedelta
 from typing import List
 
@@ -17,8 +16,35 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.action_chains import ActionChains
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+class RyanairError(Exception):
+    """Base class for all Ryanair-related exceptions."""
+
+
+class RyanairScriptError(RyanairError):
+    """Raised for any Selenium-related or script-related issues."""
+
+    def __init__(self, message, original_exception=None):
+        super().__init__(message)
+        self.original_exception = original_exception
+
+
+class FlightNotFoundError(RyanairError):
+    """Raised when the specified flight is not found."""
+
+
+class FlightSoldOutError(RyanairError):
+    """Raised when the selected flight is sold out."""
+
+
+class SeatsNotAvailableError(RyanairError):
+    """Raised when the requested seats are not available."""
+
+
+class SeatSelectionError(RyanairError):
+    """Raised when there is an error selecting a seat."""
 
 
 class Ryanair:
@@ -156,7 +182,7 @@ class Ryanair:
             mr_option.click()
         except (NoSuchElementException, ElementClickInterceptedException) as e:
             logger.error("Error selecting gender: %s", e)
-            raise
+            raise RyanairScriptError(f"Error selecting gender due to: {e}", e) from e
 
     def __populate_passenger_form(self, passenger_card):
         """Populate the name and surname fields with random data."""
@@ -168,7 +194,7 @@ class Ryanair:
                 i.send_keys(self.__generate_random_string())
         except NoSuchElementException as e:
             logger.error("Error populating name form: %s", e)
-            raise
+            raise RyanairScriptError(f"Error populating name form: {e}", e) from e
 
     def __open_search_page(self, passengers: int = 1):
         """Open the search page with the given parameters."""
@@ -209,7 +235,7 @@ class Ryanair:
             logger.info("Selected the flight.")
         except (NoSuchElementException, ElementClickInterceptedException) as e:
             logger.error("Error selecting flight: %s", e)
-            raise
+            raise RyanairScriptError(f"Error selecting flight: {e}", e) from e
 
     def __select_fare(self):
         """Select the recommended fare."""
@@ -233,7 +259,7 @@ class Ryanair:
             ElementClickInterceptedException,
         ) as e:
             logger.error("Error selecting fare: %s", e)
-            raise
+            raise RyanairScriptError(f"Error selecting fare: {e}", e) from e
 
     def __select_login_later(self):
         """Proceed without logging in."""
@@ -251,7 +277,9 @@ class Ryanair:
             ElementClickInterceptedException,
         ) as e:
             logger.error("Error clicking 'Login Later' button: %s", e)
-            raise
+            raise RyanairScriptError(
+                f"Error clicking login later button: {e}", e
+            ) from e
 
     def __fill_passenger_details(self):
         """Fill in passenger details."""
@@ -272,7 +300,7 @@ class Ryanair:
             logger.info("Populated passenger details.")
         except (TimeoutException, NoSuchElementException) as e:
             logger.error("Error filling passenger details: %s", e)
-            raise
+            raise RyanairScriptError(f"Error filling passenger details: {e}", e) from e
 
     def __proceed_to_seats_page(self):
         """Click on the continue button to proceed to seats page."""
@@ -287,8 +315,10 @@ class Ryanair:
             NoSuchElementException,
             ElementClickInterceptedException,
         ) as e:
-            logger.error("Error proceeding to seats page: %s", e)
-            raise
+            logger.error("Error proceeding to seat selection page: %s", e)
+            raise RyanairScriptError(
+                f"Error proceeding to seat selection page: {e}", e
+            ) from e
 
     def __proceed_to_fast_track(self):
         """Click on the continue button to proceed to fast track selection."""
@@ -306,7 +336,9 @@ class Ryanair:
             ElementClickInterceptedException,
         ) as e:
             logger.error("Error proceeding to fast track selection: %s", e)
-            raise
+            raise RyanairScriptError(
+                f"Error proceeding to fast track selection: {e}", e
+            ) from e
 
     def __wait_for_seatmap(self):
         """Wait until the seatmap is loaded."""
@@ -314,10 +346,9 @@ class Ryanair:
             WebDriverWait(self.__driver, self.__TIMEOUT).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, ".seatmap__seat"))
             )
-            logger.info("Seatmap is loaded.")
         except TimeoutException as e:
             logger.error("Seatmap did not load in time: %s", e)
-            raise
+            raise RyanairScriptError(f"Timeout while loading seat map: {e}", e) from e
 
     def __get_available_seats_from_seatmap(self) -> List[str]:
         """Get a list of available seat IDs."""
@@ -344,7 +375,7 @@ class Ryanair:
                 logger.info("Selected seat %s", seat)
             except NoSuchElementException as e:
                 logger.error("Error selecting seat %s: %s", seat_id, e)
-                raise
+                raise RyanairScriptError(f"Error selecting seat: {e}", e) from e
 
     def __handle_add_fast_track(self):
         """Handle the fast track page."""
@@ -361,7 +392,8 @@ class Ryanair:
             NoSuchElementException,
             ElementClickInterceptedException,
         ) as e:
-            raise Exception("Error adding fast track: %s", e)
+            logger.error("Error adding fast track")
+            raise RyanairScriptError(f"Error adding fast track: {e}", e) from e
 
     def get_available_seats_in_flight(self):
         """Returns a list of all available seats in a flight"""
@@ -370,18 +402,18 @@ class Ryanair:
 
         if not self.__flights_exist():
             logger.error("No flights exist with the given parameters.")
-            raise Exception("No flights available.")
+            raise FlightNotFoundError()
 
         flight_card = self.__get_flight_card()
         if not flight_card:
             logger.error("Could not find the specified flight.")
-            raise Exception("Flight not found.")
+            raise FlightNotFoundError()
 
         logger.info("Flight found.")
 
         if self.__is_flight_sold_out(flight_card):
             logger.error("Selected flight is sold out.")
-            raise Exception("Flight is sold out.")
+            raise FlightSoldOutError()
 
         self.__select_flight(flight_card)
         self.__select_fare()
@@ -407,7 +439,7 @@ class Ryanair:
         flight_card = self.__find_max_tickets_available()
         if not flight_card:
             logger.error("No available seats found.")
-            raise Exception("No available seats.")
+            raise SeatsNotAvailableError()
 
         logger.info("There are %d seats available.", self.__num_passengers)
         return self.__num_passengers
@@ -420,18 +452,18 @@ class Ryanair:
 
         if not self.__flights_exist():
             logger.error("No flights exist with the given parameters.")
-            raise Exception("No flights available.")
+            raise FlightNotFoundError()
 
         flight_card = self.__get_flight_card()
         if not flight_card:
             logger.error("Could not find the specified flight.")
-            raise Exception("Flight not found.")
+            raise FlightNotFoundError()
 
         logger.info("Flight found.")
 
         if self.__is_flight_sold_out(flight_card):
             logger.error("Selected flight is sold out.")
-            raise Exception("Flight is sold out.")
+            raise FlightSoldOutError()
 
         self.__select_flight(flight_card)
         self.__select_fare()
@@ -443,8 +475,8 @@ class Ryanair:
         available_seats = self.__get_available_seats_from_seatmap()
 
         if not all(elem in available_seats for elem in seats):
-            raise Exception(
-                f"Seat(s) {[elem for elem in available_seats if elem not in seats]} aren't available"
+            raise SeatSelectionError(
+                [elem for elem in available_seats if elem not in seats]
             )
 
         self.__select_seats(seats)
@@ -456,11 +488,18 @@ class Ryanair:
         self.__driver.find_element(By.CSS_SELECTOR, ".common-header__logo-icon").click()
 
     def __click_change_flight_button(self):
-        WebDriverWait(self.__driver, self.__TIMEOUT).until(
-            EC.presence_of_element_located(
-                (By.CSS_SELECTOR, '[data-e2e="change-flight-button"]')
-            )
-        ).click()
+        try:
+            WebDriverWait(self.__driver, self.__TIMEOUT).until(
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, '[data-e2e="change-flight-button"]')
+                )
+            ).click()
+        except (
+            TimeoutException,
+            NoSuchElementException,
+            ElementClickInterceptedException,
+        ) as e:
+            raise RyanairScriptError(f"Error freeing up seats: {e}", e) from e
 
     def free_reserved_seats(self):
         """Frees seats reserved in this session"""

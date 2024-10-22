@@ -2,61 +2,33 @@ import logging
 import time
 import tempfile
 import math
-import requests
 import os
-
 
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
-from ryanair import Ryanair
+from ryanair import (
+    Ryanair,
+    FlightNotFoundError,
+    FlightSoldOutError,
+    SeatsNotAvailableError,
+    RyanairScriptError,
+    SeatSelectionError,
+)
+from proxy import Proxy
 
+# Flight details
+ORIGIN = "STN"
+DESTINATION = "OSL"
+DEPARTURE_TIME = "06:30"
+TARGET_SEAT = "02E"
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def get_public_ip():
-    ip = requests.get("https://api.ipify.org").content.decode("utf8")
-    logger.info("Public IP is %s", ip)
-    return ip
-
-
-PUBLIC_IP = get_public_ip()
-
-
-def authorize_ip_for_proxy():
-    logger.info("Authorizing IP for proxy")
-    response = requests.post(
-        "https://proxy.webshare.io/api/v2/proxy/ipauthorization/",
-        json={"ip_address": PUBLIC_IP},
-        headers={"Authorization": f"Token {os.getenv("PROXY_API_KEY")}"},
-    )
-    if response.status_code != 400:
-        raise Exception("Could not authorize ip for proxy")
-
-
-def get_proxies():
-    logger.info("Getting proxy list")
-    authorize_ip_for_proxy()
-
-    response = requests.get(
-        "https://proxy.webshare.io/api/v2/proxy/list/?mode=direct&page=1&page_size=50",
-        headers={"Authorization": f"Token {os.getenv("PROXY_API_KEY")}"},
-    )
-
-    proxy_details = response.json()["results"]
-    proxies = [f"{proxy['proxy_address']}:{proxy['port']}" for proxy in proxy_details]
-
-    logger.info("Got %d proxies", len(proxies))
-    return proxies
-
-
-PROXIES = get_proxies()
-
-
-def create_webdriver(use_proxy=False):
+def create_webdriver(proxy_ip: str = None):
     options = webdriver.ChromeOptions()
     options.add_argument("--incognito")
     options.add_argument("--disable-blink-features=AutomationControlled")
@@ -71,8 +43,8 @@ def create_webdriver(use_proxy=False):
     user_data_dir = tempfile.mkdtemp()
     options.add_argument(f"--user-data-dir={user_data_dir}")
 
-    if use_proxy:
-        options.add_argument(f"--proxy-server=http://{PROXIES.pop()}")
+    if proxy_ip:
+        options.add_argument(f"--proxy-server=http://{proxy_ip}")
 
     driver = webdriver.Chrome(
         service=Service(ChromeDriverManager().install()), options=options
@@ -93,37 +65,39 @@ def create_webdriver(use_proxy=False):
 
 
 def main():
-    # Flight details
-    origin = "STN"
-    destination = "WRO"
-    departure_time = "21:30"
-    target_seat = "02E"
+    proxies = Proxy(os.getenv("PROXY_API_KEY"))
 
     driver = create_webdriver()
-    ra = Ryanair(driver, origin, destination, departure_time)
+    ra = Ryanair(driver, ORIGIN, DESTINATION, DEPARTURE_TIME)
 
     try:
         # Open the search page and accept cookies
         available_seats = ra.get_available_seats_in_flight()
 
-        if target_seat not in available_seats:
-            raise Exception("Target seat %s is not available", target_seat)
+        if TARGET_SEAT not in available_seats:
+            raise SeatSelectionError(f"Target seat {TARGET_SEAT} is not available")
 
-        available_seats.remove(target_seat)
+        available_seats.remove(TARGET_SEAT)
 
         logger.info(
             "There are %d available seats in the flight excluding selection",
             len(available_seats),
         )
 
+    except (FlightNotFoundError, FlightSoldOutError, SeatsNotAvailableError) as e:
+        logger.error("Flight error: %s", e)
+        return
+    except RyanairScriptError as e:
+        logger.error("Script error: %s", e)
+        return
     except Exception as e:
-        logger.error("An error occurred: %s", e)
+        logger.error("An unexpected error occurred: %s", e)
         return
     finally:
         driver.quit()
 
     driver = create_webdriver()
-    ra = Ryanair(driver, origin, destination, departure_time)
+    ra = Ryanair(driver, ORIGIN, DESTINATION, DEPARTURE_TIME)
 
     try:
         # Open the search page and accept cookies
@@ -134,8 +108,11 @@ def main():
             available_tickets,
         )
 
-    except Exception as e:
-        logger.error("An error occurred: %s", e)
+    except (FlightNotFoundError, FlightSoldOutError, SeatsNotAvailableError) as e:
+        logger.error("Flight error: %s", e)
+        return
+    except RyanairScriptError as e:
+        logger.error("Script error: %s", e)
         return
     finally:
         driver.quit()
@@ -144,9 +121,12 @@ def main():
     drivers_needed = math.ceil(len(available_seats) / available_tickets)
     logger.info("Need to create %d chrome drivers", drivers_needed)
 
-    if drivers_needed > len(PROXIES):
+    proxy_list = proxies.get_proxy_list()
+
+    if drivers_needed > len(proxy_list):
         logger.error(
-            "Only %d proxies available. Cannot guarantee seat selection", len(PROXIES)
+            "Only %d proxies available. Cannot guarantee seat selection",
+            len(proxy_list),
         )
         return
 
@@ -158,10 +138,10 @@ def main():
         try:
             logger.info("Starting session %d", i + 1)
 
-            driver = create_webdriver(use_proxy=True)
+            driver = create_webdriver(proxy_list.pop())
             drivers.append(driver)
 
-            ra = Ryanair(driver, origin, destination, departure_time)
+            ra = Ryanair(driver, ORIGIN, DESTINATION, DEPARTURE_TIME)
             ras.append(ra)
 
             num_seats_to_reserve = (
@@ -180,23 +160,25 @@ def main():
 
             logger.info("Session %d seats reserved", i + 1)
 
-            print(len(seats_remaining))
             seats_remaining = [
                 seat for seat in seats_remaining if seat not in seats_to_reserve
             ]
 
-            print(len(seats_remaining))
-
-        except Exception as e:
-            logger.error("An error occurred in session %d: %s", i + 1, e)
+        except (FlightNotFoundError, FlightSoldOutError, SeatsNotAvailableError) as e:
+            logger.error("Flight error in session %d: %s", i + 1, e)
+        except RyanairScriptError as e:
+            logger.error("Script error in session %d: %s", i + 1, e)
+        finally:
             driver.quit()
-            raise
 
     logger.info("Waiting for user to make booking")
     time.sleep(60)
 
     for ra in ras:
-        ra.free_reserved_seats()
+        try:
+            ra.free_reserved_seats()
+        except RyanairScriptError as e:
+            logger.error("Error freeing seats: %s", e)
 
     # Close all WebDriver instances
     for driver in drivers:

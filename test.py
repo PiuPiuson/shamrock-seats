@@ -168,8 +168,6 @@ def main():
             logger.error("Flight error in session %d: %s", i + 1, e)
         except RyanairScriptError as e:
             logger.error("Script error in session %d: %s", i + 1, e)
-        finally:
-            driver.quit()
 
     logger.info("Waiting for user to make booking")
     time.sleep(60)

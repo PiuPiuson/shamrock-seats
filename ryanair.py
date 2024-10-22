@@ -438,7 +438,7 @@ class Ryanair:
 
     def __click_change_flight_button(self):
         WebDriverWait(self.__driver, self.__TIMEOUT).until(
-            EC.element_to_be_clickable(
+            EC.presence_of_element_located(
                 (By.CSS_SELECTOR, '[data-e2e="change-flight-button"]')
             )
         ).click()
@@ -446,7 +446,6 @@ class Ryanair:
     def free_reserved_seats(self):
         """Frees seats reserved in this session"""
         logger.info("Freeing seats up")
-        self.__click_ryanair_logo()
         self.__open_search_page()
         self.__click_change_flight_button()
         logger.info("Seats freed successfully")

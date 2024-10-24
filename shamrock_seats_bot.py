@@ -2,7 +2,7 @@ import os
 import logging
 from datetime import datetime
 
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -10,12 +10,20 @@ from telegram.ext import (
     ConversationHandler,
     MessageHandler,
     filters,
+    CallbackQueryHandler,
 )
 
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
-from ryanair import Ryanair
+from ryanair import (
+    Ryanair,
+    FlightNotFoundError,
+    FlightSoldOutError,
+    SeatsNotAvailableError,
+    RyanairScriptError,
+    SeatSelectionError,
+)
 
 # Enable logging
 logging.basicConfig(
@@ -27,7 +35,40 @@ logger = logging.getLogger(__name__)
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 # States for conversation
-DATE, ORIGIN, DESTINATION, FLIGHT_NUMBER, SEAT = range(5)
+ORIGIN, DESTINATION, TIME, FLIGHT_NUMBER, SEAT = range(5)
+
+
+def create_webdriver(proxy_ip: str = None):
+    options = webdriver.ChromeOptions()
+    options.add_argument("--incognito")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option("useAutomationExtension", False)
+
+    options.add_argument("--blink-settings=imagesEnabled=false")
+    options.add_experimental_option(
+        "prefs", {"profile.managed_default_content_settings.images": 2}
+    )
+
+    if proxy_ip:
+        options.add_argument(f"--proxy-server=http://{proxy_ip}")
+
+    driver = webdriver.Chrome(
+        service=Service(ChromeDriverManager().install()), options=options
+    )
+    driver.execute_script(
+        "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+    )
+
+    user_agents = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36",
+    ]
+
+    driver.execute_cdp_cmd(
+        "Network.setUserAgentOverride", {"userAgent": user_agents[0]}
+    )
+
+    return driver
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -42,28 +83,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def reserve_seat_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start the seat reservation conversation."""
     await update.message.reply_text(
-        "Great! Let's start with the flight date.\n\n"
-        "Please enter the flight date in the format YYYY-MM-DD:"
+        "Great! Let's start!\n\n Please enter the origin airport code (e.g., STN):"
     )
-    return DATE  # Move to the next step
-
-
-async def get_flight_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Store the flight date and ask for the origin."""
-    date_input = update.message.text.strip()
-    # Validate date format
-    try:
-        datetime.strptime(date_input, "%Y-%m-%d")
-        context.user_data["date"] = date_input
-        await update.message.reply_text(
-            "Got it!\n\nNow, enter the origin airport code (e.g., STN):"
-        )
-        return ORIGIN
-    except ValueError:
-        await update.message.reply_text(
-            "Invalid date format. Please enter date as YYYY-MM-DD:"
-        )
-        return DATE
+    return ORIGIN
 
 
 async def get_flight_origin(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -74,7 +96,9 @@ async def get_flight_origin(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Invalid airport code. Please enter a 3-letter code (e.g., STN):"
         )
         return ORIGIN
+
     context.user_data["origin"] = origin_input
+
     await update.message.reply_text(
         "Thanks!\n\nNow, enter the destination airport code (e.g., ATH):"
     )
@@ -82,31 +106,86 @@ async def get_flight_origin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def get_flight_destination(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Store the destination and ask for the flight number."""
+    """Store the destination and ask for the flight date."""
     destination_input = update.message.text.strip().upper()
     if not destination_input.isalpha() or len(destination_input) != 3:
         await update.message.reply_text(
             "Invalid airport code. Please enter a 3-letter code (e.g., ATH):"
         )
         return DESTINATION
+
     context.user_data["destination"] = destination_input
-    await update.message.reply_text("Please enter the flight number (e.g., FR2362):")
-    return FLIGHT_NUMBER
+
+    await update.message.reply_text("What time is the flight? (eg. 14:30)")
+    return TIME
 
 
-async def get_flight_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Store the flight number and ask for the preferred seat."""
-    flight_number_input = update.message.text.strip().replace(" ", "").upper()
-    if (
-        not flight_number_input.startswith("FR")
-        or not flight_number_input[2:].isdigit()
-    ):
+async def get_flight_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Store the flight time and ask for the seat."""
+    time_input = update.message.text.strip()
+    # Validate date format
+    try:
+        datetime.strptime(time_input, "%H:%M")
+        context.user_data["time"] = time_input
+
+    except ValueError:
         await update.message.reply_text(
-            "Invalid flight number. Please enter a valid Ryanair flight number (e.g., FR2362):"
+            "Invalid date format. Please enter time as HH:MM:"
         )
-        return FLIGHT_NUMBER
-    context.user_data["flight_number"] = flight_number_input
-    await update.message.reply_text(
+        return TIME
+
+    await update.message.reply_text("Looking for flight. Please wait...")
+
+    driver = create_webdriver()
+    ra = Ryanair(
+        driver,
+        context.user_data["origin"],
+        context.user_data["destination"],
+        context.user_data["time"],
+    )
+
+    try:
+        available_seats = ra.get_available_seats_in_flight()
+    except FlightNotFoundError:
+        await update.message.reply_text("Could not find flight.\nPlease try again")
+        return ConversationHandler.END
+    except FlightSoldOutError:
+        await update.message.reply_text(
+            "Flight is sold out.\n"
+            "At least one free ticket is needed for this bot to work.\n"
+            "Better luck next time!"
+        )
+        return ConversationHandler.END
+    except RyanairScriptError:
+        await update.message.reply_text(
+            "An internal error occurred.\nPlease try again."
+        )
+        return ConversationHandler.END
+    finally:
+        driver.quit()
+
+    await update.message.reply_text(available_seats)
+    return SEAT
+
+
+async def get_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Store the flight date and ask for the preferred seat."""
+    query = update.callback_query
+    await query.answer()
+
+    context.user_data["date"] = query.data
+
+    await query.edit_message_text("Looking for flight. Please wait...")
+
+    driver = create_webdriver()
+    ra = Ryanair(
+        driver,
+        context.user_data["origin"],
+        context.user_data["destination"],
+        context.user_data["time"],
+    )
+
+    await query.edit_message_text(
         "Almost done!\n\nPlease enter your preferred seat (e.g., 01C):"
     )
     return SEAT
@@ -182,16 +261,13 @@ if __name__ == "__main__":
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("reserve", reserve_seat_start)],
         states={
-            DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_flight_date)],
             ORIGIN: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_flight_origin)
             ],
             DESTINATION: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_flight_destination)
             ],
-            FLIGHT_NUMBER: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, get_flight_number)
-            ],
+            TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_flight_time)],
             SEAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_flight_seat)],
         },
         fallbacks=[

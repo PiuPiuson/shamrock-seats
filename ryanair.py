@@ -126,11 +126,18 @@ class Ryanair:
     def __flights_exist(self) -> bool:
         """Check if flights exist with the given parameters."""
         try:
-            WebDriverWait(self.__driver, self.__TIMEOUT).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, ".flight-card"))
+            element = WebDriverWait(self.__driver, self.__TIMEOUT).until(
+                EC.any_of(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, ".flight-card")),
+                    EC.presence_of_element_located(
+                        (By.CSS_SELECTOR, ".no-flights__icon")
+                    ),
+                )
             )
-            logger.info("Flights are available.")
-            return True
+
+            if "flight-card" in element.get_attribute("class"):
+                logger.info("Flights are available.")
+                return True
         except TimeoutException:
             logger.info("No flights found.")
             return False
@@ -395,6 +402,31 @@ class Ryanair:
             logger.error("Error adding fast track")
             raise RyanairScriptError(f"Error adding fast track: {e}", e) from e
 
+    def __is_select_baggage_page(self):
+        """Checks whether the loaded page is the check baggage page"""
+        header = WebDriverWait(self.__driver, self.__TIMEOUT).until(
+            EC.any_of(
+                EC.presence_of_element_located((By.CSS_SELECTOR, ".card__header")),
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, "seats-container__page-title")
+                ),
+            )
+        )
+
+        return "bag" in header.text
+
+    def __complete_baggage_page(self):
+        """Completes and submits the baggage page"""
+        WebDriverWait(self.__driver, self.__TIMEOUT).until(
+            EC.presence_of_element_located(
+                (By.CSS_SELECTOR, '[data-ref="product.small-bag"]')
+            ),
+        ).find_element(By.CSS_SELECTOR, ".ry-radio-circle-button__label").click()
+
+        self.__driver.find_element(
+            By.CSS_SELECTOR, '[data-ref="bags-continue-button"]'
+        ).click()
+
     def get_available_seats_in_flight(self):
         """Returns a list of all available seats in a flight"""
         self.__open_search_page(1)
@@ -420,6 +452,9 @@ class Ryanair:
         self.__select_login_later()
         self.__fill_passenger_details()
         self.__proceed_to_seats_page()
+
+        if self.__is_select_baggage_page():
+            self.__complete_baggage_page()
 
         self.__wait_for_seatmap()
 
@@ -470,6 +505,9 @@ class Ryanair:
         self.__select_login_later()
         self.__fill_passenger_details()
         self.__proceed_to_seats_page()
+
+        if self.__is_select_baggage_page():
+            self.__complete_baggage_page()
 
         self.__wait_for_seatmap()
         available_seats = self.__get_available_seats_from_seatmap()

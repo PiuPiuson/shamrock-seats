@@ -55,6 +55,7 @@ def create_webdriver(proxy_ip: str = None):
     options.add_experimental_option(
         "prefs", {"profile.managed_default_content_settings.images": 2}
     )
+    options.add_argument("--headless=new")
 
     user_data_dir = tempfile.mkdtemp()
     options.add_argument(f"--user-data-dir={user_data_dir}")
@@ -276,6 +277,7 @@ async def get_flight_seat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Need to create %d chrome drivers", drivers_needed)
 
     seats_remaining = available_seats
+    seats_remaining.remove(selected_seat)
 
     proxy_list = proxies.get_proxy_list()
 
@@ -331,8 +333,10 @@ async def get_flight_seat(update: Update, context: ContextTypes.DEFAULT_TYPE):
             SeatSelectionError,
         ) as e:
             logger.error("Flight error in session %d: %s", i + 1, e)
+            # retry with this agent for a number of times
         except RyanairScriptError as e:
             logger.error("Script error in session %d: %s", i + 1, e)
+            # also retry
 
     for driver in drivers:
         driver.quit()

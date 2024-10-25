@@ -365,9 +365,8 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def end_conversation(context):
-    """Clear user data at the end of the conversation"""
+    """Clear user context at the end of the conversation"""
     context.user_data.clear()
-    context.chat_data.clear()
 
     return ConversationHandler.END
 

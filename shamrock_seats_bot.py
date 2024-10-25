@@ -21,7 +21,8 @@ from telegram.constants import ChatAction
 
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
+
+
 from ryanair import (
     Ryanair,
     FlightNotFoundError,
@@ -39,6 +40,9 @@ logger = logging.getLogger(__name__)
 
 # Telegram bot token from environment variable
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+PROXY_TOKEN = os.getenv("PROXY_API_KEY")
+SELENIUM_URL = os.getenv("SELENIUM_URL")
+IS_DOCKER = os.getenv("DOCKER")
 
 # States for conversation
 ORIGIN, DESTINATION, TIME, FLIGHT_NUMBER, SEAT = range(5)
@@ -63,20 +67,31 @@ def create_webdriver(proxy_ip: str = None):
     if proxy_ip:
         options.add_argument(f"--proxy-server=http://{proxy_ip}")
 
-    driver = webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()), options=options
-    )
+    if not IS_DOCKER:
+        from webdriver_manager.chrome import ChromeDriverManager
+
+        driver = webdriver.Chrome(
+            service=Service(ChromeDriverManager().install()), options=options
+        )
+
+        user_agents = [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36",
+        ]
+
+        driver.execute_cdp_cmd(
+            "Network.setUserAgentOverride", {"userAgent": user_agents[0]}
+        )
+
+    else:
+        driver = webdriver.Remote(
+            command_executor=SELENIUM_URL,
+            options=options,
+        )
+
     driver.execute_script(
         "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
     )
-
-    user_agents = [
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36",
-    ]
-
-    driver.execute_cdp_cmd(
-        "Network.setUserAgentOverride", {"userAgent": user_agents[0]}
-    )
+    driver.set_window_size(1280, 1280)
 
     return driver
 
@@ -85,7 +100,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send a welcome message when the command /start is issued."""
     await update.message.reply_text(
         "Welcome to ShamrockSeats! 🍀\n\n"
-        "Use /reserve to reserve a selected seat.\n\n"
+        "Use /reserve to reserve a selected seat.\n"
         "You can cancel at any time by typing /cancel"
     )
 
@@ -93,7 +108,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def reserve_seat_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start the seat reservation conversation."""
     await update.message.reply_text(
-        "Great! Let's start!\n\n Please enter the origin airport code (e.g., STN):"
+        "Great! Let's start!\n\nPlease enter the origin airport code (e.g. STN):"
     )
     return ORIGIN
 
@@ -103,14 +118,14 @@ async def get_flight_origin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     origin_input = update.message.text.strip().upper()
     if not origin_input.isalpha() or len(origin_input) != 3:
         await update.message.reply_text(
-            "Invalid airport code. Please enter a 3-letter code (e.g., STN):"
+            "Invalid airport code. Please enter a 3-letter code (e.g. STN):"
         )
         return ORIGIN
 
     context.user_data["origin"] = origin_input
 
     await update.message.reply_text(
-        "Thanks!\n\nNow, enter the destination airport code (e.g., ATH):"
+        "Thanks!\n\nNow, enter the destination airport code (e.g. OSL):"
     )
     return DESTINATION
 
@@ -120,7 +135,7 @@ async def get_flight_destination(update: Update, context: ContextTypes.DEFAULT_T
     destination_input = update.message.text.strip().upper()
     if not destination_input.isalpha() or len(destination_input) != 3:
         await update.message.reply_text(
-            "Invalid airport code. Please enter a 3-letter code (e.g., ATH):"
+            "Invalid airport code. Please enter a 3-letter code (e.g., OSL):"
         )
         return DESTINATION
 
@@ -189,19 +204,19 @@ async def get_flight_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 "Could not find flight.\nPlease try again by sending /reserve"
             )
-            return ConversationHandler.END
+            return end_conversation(context)
         except FlightSoldOutError:
             await update.message.reply_text(
                 "Flight is sold out.\n"
                 "At least one free ticket is needed for this bot to work.\n"
                 "Better luck next time!"
             )
-            return ConversationHandler.END
+            return end_conversation(context)
         except RyanairScriptError:
             await update.message.reply_text(
                 "An internal error occurred.\nPlease try again by sending /reserve."
             )
-            return ConversationHandler.END
+            return end_conversation(context)
         finally:
             driver.quit()
 
@@ -212,7 +227,7 @@ async def get_flight_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "There is only one seat available in the flight.\n"
             "Go ahead and snatch it!"
         )
-        return ConversationHandler.END
+        return end_conversation(context)
 
     seat_layout = divide_seats_evenly(available_seats)
 
@@ -253,7 +268,7 @@ async def get_flight_seat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     driver = create_webdriver()
     ra = Ryanair(driver, origin, destination, departure_time)
 
-    proxies = Proxy(os.getenv("PROXY_API_KEY"))
+    proxies = Proxy(PROXY_TOKEN)
 
     try:
         available_tickets = ra.get_number_of_tickets_available()
@@ -262,13 +277,13 @@ async def get_flight_seat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await loading_message.edit_text(
             "The flight info has changed. Please try again by using /reserve"
         )
-        return ConversationHandler.END
+        return end_conversation(context)
 
     except RyanairScriptError:
         await loading_message.edit_text(
             "An internal error has occurred. Please try again by using /reserve"
         )
-        return ConversationHandler.END
+        return end_conversation(context)
 
     finally:
         driver.quit()
@@ -281,8 +296,6 @@ async def get_flight_seat(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     proxy_list = proxies.get_proxy_list()
 
-    drivers = []
-    ras = []
     for i in range(drivers_needed):
         # Calculate progress
         progress_percentage = i / drivers_needed
@@ -302,10 +315,8 @@ async def get_flight_seat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info("Starting session %d", i + 1)
 
         driver = create_webdriver(proxy_list.pop())
-        drivers.append(driver)
 
         ra = Ryanair(driver, origin, destination, departure_time)
-        ras.append(ra)
 
         num_seats_to_reserve = (
             available_tickets
@@ -337,21 +348,27 @@ async def get_flight_seat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except RyanairScriptError as e:
             logger.error("Script error in session %d: %s", i + 1, e)
             # also retry
-
-    for driver in drivers:
-        driver.quit()
-    logger.info("All sessions closed.")
+        finally:
+            driver.quit()
 
     await loading_message.edit_text("Finished reserving seats.")
     await update.effective_chat.send_message(
         "Check in now with random seat allocation."
     )
-    return ConversationHandler.END
+    return end_conversation(context)
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancel the current conversation."""
     await update.message.reply_text("Seat reservation has been canceled.")
+    return end_conversation(context)
+
+
+async def end_conversation(context):
+    """Clear user data at the end of the conversation"""
+    context.user_data.clear()
+    context.chat_data.clear()
+
     return ConversationHandler.END
 
 

@@ -408,7 +408,7 @@ class Ryanair:
             EC.any_of(
                 EC.presence_of_element_located((By.CSS_SELECTOR, ".card__header")),
                 EC.presence_of_element_located(
-                    (By.CSS_SELECTOR, "seats-container__page-title")
+                    (By.CSS_SELECTOR, ".seats-container__page-title")
                 ),
             )
         )

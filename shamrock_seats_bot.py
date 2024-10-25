@@ -204,19 +204,19 @@ async def get_flight_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 "Could not find flight.\nPlease try again by sending /reserve"
             )
-            return end_conversation(context)
+            return await end_conversation(context)
         except FlightSoldOutError:
             await update.message.reply_text(
                 "Flight is sold out.\n"
                 "At least one free ticket is needed for this bot to work.\n"
                 "Better luck next time!"
             )
-            return end_conversation(context)
+            return await end_conversation(context)
         except RyanairScriptError:
             await update.message.reply_text(
                 "An internal error occurred.\nPlease try again by sending /reserve."
             )
-            return end_conversation(context)
+            return await end_conversation(context)
         finally:
             driver.quit()
 
@@ -227,7 +227,7 @@ async def get_flight_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "There is only one seat available in the flight.\n"
             "Go ahead and snatch it!"
         )
-        return end_conversation(context)
+        return await end_conversation(context)
 
     seat_layout = divide_seats_evenly(available_seats)
 
@@ -277,13 +277,13 @@ async def get_flight_seat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await loading_message.edit_text(
             "The flight info has changed. Please try again by using /reserve"
         )
-        return end_conversation(context)
+        return await end_conversation(context)
 
     except RyanairScriptError:
         await loading_message.edit_text(
             "An internal error has occurred. Please try again by using /reserve"
         )
-        return end_conversation(context)
+        return await end_conversation(context)
 
     finally:
         driver.quit()
@@ -355,13 +355,13 @@ async def get_flight_seat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_chat.send_message(
         "Check in now with random seat allocation."
     )
-    return end_conversation(context)
+    return await end_conversation(context)
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancel the current conversation."""
     await update.message.reply_text("Seat reservation has been canceled.")
-    return end_conversation(context)
+    return await end_conversation(context)
 
 
 async def end_conversation(context):

@@ -2,6 +2,9 @@ import os
 import logging
 from datetime import datetime
 import tempfile
+import math
+
+from proxy import Proxy
 
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -14,6 +17,7 @@ from telegram.ext import (
     filters,
     CallbackQueryHandler,
 )
+from telegram.constants import ChatAction
 
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -125,6 +129,32 @@ async def get_flight_destination(update: Update, context: ContextTypes.DEFAULT_T
     return TIME
 
 
+def divide_seats_evenly(seats, max_rows=4):
+    """Distribute the seats as evenly as possible across the rows."""
+    num_seats = len(seats)
+    rows = min(
+        max_rows, num_seats
+    )  # Limit to a max of 'max_rows' rows or total seat count
+
+    # Calculate the number of seats per row as evenly as possible
+    seats_per_row = [math.ceil(num_seats / rows)] * rows
+    total_seats = sum(seats_per_row)
+
+    # Adjust to ensure total seats match the number of available seats
+    if total_seats > num_seats:
+        for i in range(total_seats - num_seats):
+            seats_per_row[-(i + 1)] -= 1
+
+    # Split the seats list into rows based on seats_per_row
+    seat_layout = []
+    start_index = 0
+    for count in seats_per_row:
+        seat_layout.append(seats[start_index : start_index + count])
+        start_index += count
+
+    return seat_layout
+
+
 async def get_flight_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Store the flight time and ask for the seat."""
     time_input = update.message.text.strip()
@@ -139,118 +169,180 @@ async def get_flight_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return TIME
 
-    await update.message.reply_text("Looking for flight. Please wait...")
+    if not context.user_data.get("available_seats", None):
+        await update.message.reply_text("Looking for available seats. Please wait...")
+        await update.effective_chat.send_action(ChatAction.TYPING)
 
-    driver = create_webdriver()
-    ra = Ryanair(
-        driver,
-        context.user_data["origin"],
-        context.user_data["destination"],
-        context.user_data["time"],
-    )
+        driver = create_webdriver()
+        ra = Ryanair(
+            driver,
+            context.user_data["origin"],
+            context.user_data["destination"],
+            context.user_data["time"],
+        )
 
-    try:
-        available_seats = ra.get_available_seats_in_flight()
-    except FlightNotFoundError:
-        await update.message.reply_text("Could not find flight.\nPlease try again")
-        return ConversationHandler.END
-    except FlightSoldOutError:
+        try:
+            context.user_data["available_seats"] = ra.get_available_seats_in_flight()
+
+        except FlightNotFoundError:
+            await update.message.reply_text(
+                "Could not find flight.\nPlease try again by sending /reserve"
+            )
+            return ConversationHandler.END
+        except FlightSoldOutError:
+            await update.message.reply_text(
+                "Flight is sold out.\n"
+                "At least one free ticket is needed for this bot to work.\n"
+                "Better luck next time!"
+            )
+            return ConversationHandler.END
+        except RyanairScriptError:
+            await update.message.reply_text(
+                "An internal error occurred.\nPlease try again by sending /reserve."
+            )
+            return ConversationHandler.END
+        finally:
+            driver.quit()
+
+    available_seats = context.user_data["available_seats"]
+
+    if len(available_seats) == 1:
         await update.message.reply_text(
-            "Flight is sold out.\n"
-            "At least one free ticket is needed for this bot to work.\n"
-            "Better luck next time!"
+            "There is only one seat available in the flight.\n"
+            "Go ahead and snatch it!"
         )
         return ConversationHandler.END
-    except RyanairScriptError:
-        await update.message.reply_text(
-            "An internal error occurred.\nPlease try again."
-        )
-        return ConversationHandler.END
-    finally:
-        driver.quit()
 
-    await update.message.reply_text(available_seats)
-    return SEAT
+    seat_layout = divide_seats_evenly(available_seats)
 
+    # Initialize the list to hold rows of buttons
+    keyboard = []
 
-async def get_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Store the flight date and ask for the preferred seat."""
-    query = update.callback_query
-    await query.answer()
+    for row in seat_layout:
+        button_row = [InlineKeyboardButton(seat, callback_data=seat) for seat in row]
+        keyboard.append(button_row)
 
-    context.user_data["date"] = query.data
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await query.edit_message_text("Looking for flight. Please wait...")
-
-    driver = create_webdriver()
-    ra = Ryanair(
-        driver,
-        context.user_data["origin"],
-        context.user_data["destination"],
-        context.user_data["time"],
-    )
-
-    await query.edit_message_text(
-        "Almost done!\n\nPlease enter your preferred seat (e.g., 01C):"
+    await update.message.reply_text(
+        "Select your preferred seat:", reply_markup=reply_markup
     )
     return SEAT
 
 
 async def get_flight_seat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Store the seat number and proceed to reserve the seat."""
-    seat_input = update.message.text.strip().upper()
-    # Simple validation
-    if (
-        len(seat_input) < 2
-        or not seat_input[:-1].isdigit()
-        or not seat_input[-1].isalpha()
-    ):
-        await update.message.reply_text(
-            "Invalid seat format. Please enter seat as row number followed by seat letter (e.g., 01C):"
-        )
-        return SEAT
-    context.user_data["seat"] = seat_input
-    await update.message.reply_text(
-        "Got it!\n\nReserving seat %s on flight %s from %s to %s on %s..."
-        % (
-            context.user_data["seat"],
-            context.user_data["flight_number"],
-            context.user_data["origin"],
-            context.user_data["destination"],
-            context.user_data["date"],
-        )
+    query = update.callback_query
+    await query.answer()
+
+    selected_seat = query.data
+    await query.edit_message_text(
+        f"Reserving every other seat apart from {selected_seat}"
     )
-    # Proceed to reserve seat
-    await reserve_seat(update, context)
-    return ConversationHandler.END  # End the conversation
 
+    available_seats = context.user_data["available_seats"]
+    origin = context.user_data["origin"]
+    destination = context.user_data["destination"]
+    departure_time = context.user_data["time"]
 
-async def reserve_seat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Reserve the seat using Selenium."""
-    user_data = context.user_data
-    date = user_data["date"]
-    origin = user_data["origin"]
-    destination = user_data["destination"]
-    flight_number = user_data["flight_number"]
-    seat = user_data["seat"]
+    loading_message = await update.effective_chat.send_message(
+        "Starting seat reservation process..."
+    )
 
-    # Inform user that the process may take some time
-    await update.message.reply_text("Processing your request, please wait...")
+    driver = create_webdriver()
+    ra = Ryanair(driver, origin, destination, departure_time)
 
-    # Use Selenium to reserve the seat
+    proxies = Proxy(os.getenv("PROXY_API_KEY"))
+
     try:
-        # Initialize webdriver
-        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
-        ra = Ryanair(driver)
-        ra.run(date, origin, destination, flight_number, seat)
-        await update.message.reply_text(
-            "Success! Seat reservation process completed.\nCheck in with random seat allocation in the next 2 minutes!"
+        available_tickets = ra.get_number_of_tickets_available()
+
+    except (FlightNotFoundError, FlightSoldOutError, SeatsNotAvailableError):
+        await loading_message.edit_text(
+            "The flight info has changed. Please try again by using /reserve"
         )
-    except Exception as e:
-        logger.error("Error during seat reservation: %s", e)
-        await update.message.reply_text(str(e))
+        return ConversationHandler.END
+
+    except RyanairScriptError:
+        await loading_message.edit_text(
+            "An internal error has occurred. Please try again by using /reserve"
+        )
+        return ConversationHandler.END
+
     finally:
         driver.quit()
+
+    drivers_needed = math.ceil(len(available_seats) / available_tickets)
+    logger.info("Need to create %d chrome drivers", drivers_needed)
+
+    seats_remaining = available_seats
+
+    proxy_list = proxies.get_proxy_list()
+
+    drivers = []
+    ras = []
+    for i in range(drivers_needed):
+        # Calculate progress
+        progress_percentage = i / drivers_needed
+        filled_slots = int(
+            progress_percentage * 10
+        )  # Number of filled emojis (🔲 or ▫️)
+
+        # Build the progress bar
+        progress_bar = "🔲" * filled_slots + "▫️" * (10 - filled_slots)
+        percent_display = int(progress_percentage * 100)
+
+        # Update the message
+        await loading_message.edit_text(
+            f"Reserving seats...\n[{progress_bar}] {percent_display}%"
+        )
+
+        logger.info("Starting session %d", i + 1)
+
+        driver = create_webdriver(proxy_list.pop())
+        drivers.append(driver)
+
+        ra = Ryanair(driver, origin, destination, departure_time)
+        ras.append(ra)
+
+        num_seats_to_reserve = (
+            available_tickets
+            if len(seats_remaining) >= available_tickets
+            else len(seats_remaining)
+        )
+
+        logger.info("Session %d needs to reserve %d seats", i + 1, num_seats_to_reserve)
+
+        seats_to_reserve = seats_remaining[:num_seats_to_reserve]
+
+        try:
+            ra.reserve_seats(seats_to_reserve)
+
+            logger.info("Session %d seats reserved", i + 1)
+
+            seats_remaining = [
+                seat for seat in seats_remaining if seat not in seats_to_reserve
+            ]
+
+        except (
+            FlightNotFoundError,
+            FlightSoldOutError,
+            SeatsNotAvailableError,
+            SeatSelectionError,
+        ) as e:
+            logger.error("Flight error in session %d: %s", i + 1, e)
+        except RyanairScriptError as e:
+            logger.error("Script error in session %d: %s", i + 1, e)
+
+    for driver in drivers:
+        driver.quit()
+    logger.info("All sessions closed.")
+
+    await loading_message.edit_text("Finished reserving seats.")
+    await update.effective_chat.send_message(
+        "Check in now with random seat allocation."
+    )
+    return ConversationHandler.END
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -273,7 +365,7 @@ if __name__ == "__main__":
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_flight_destination)
             ],
             TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_flight_time)],
-            SEAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_flight_seat)],
+            SEAT: [CallbackQueryHandler(get_flight_seat)],
         },
         fallbacks=[
             CommandHandler("cancel", cancel)

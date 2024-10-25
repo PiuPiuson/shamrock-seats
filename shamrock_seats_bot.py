@@ -1,6 +1,8 @@
 import os
 import logging
 from datetime import datetime
+import tempfile
+
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -49,6 +51,9 @@ def create_webdriver(proxy_ip: str = None):
     options.add_experimental_option(
         "prefs", {"profile.managed_default_content_settings.images": 2}
     )
+
+    user_data_dir = tempfile.mkdtemp()
+    options.add_argument(f"--user-data-dir={user_data_dir}")
 
     if proxy_ip:
         options.add_argument(f"--proxy-server=http://{proxy_ip}")

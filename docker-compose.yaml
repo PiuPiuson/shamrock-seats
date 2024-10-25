@@ -1,4 +1,3 @@
-version: "3.8"
 services:
   shamrock_seats_bot:
     build: .
@@ -6,7 +5,9 @@ services:
     restart: always
     environment:
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
+      PROXY_API_KEY: "${PROXY_API_KEY}"
       SELENIUM_URL: "http://selenium:4444/wd/hub"
+      DOCKER: true
     volumes:
       - .:/app
     networks:
@@ -21,7 +22,7 @@ services:
       - botnet
     ports:
       - "4444:4444"
-    shm_size: '2gb'
+    shm_size: '4gb'
 
 networks:
   botnet:

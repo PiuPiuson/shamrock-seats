@@ -3,6 +3,7 @@ import random
 import string
 from datetime import datetime, timedelta
 from typing import List
+import time
 
 from selenium.common.exceptions import (
     NoSuchElementException,
@@ -67,6 +68,12 @@ class Ryanair:
     def __generate_random_string(length: int = 6) -> str:
         """Generate a random string of specified length."""
         return "".join(random.choices(string.ascii_letters, k=length))
+
+    def __take_screenshot(self, step_name):
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        filename = f"screenshots/{step_name}_{timestamp}.png"
+        self.__driver.save_screenshot(filename)
+        print(f"Screenshot saved: {filename}")
 
     def __generate_departure_date(self) -> str:
         """

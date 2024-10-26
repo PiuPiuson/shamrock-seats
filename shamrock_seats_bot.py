@@ -89,9 +89,9 @@ def retry_async(exceptions, max_attempts=3, initial_delay=1, backoff_factor=2):
         SeatSelectionError,
         RyanairScriptError,
     ),
-    max_attempts=5,
-    initial_delay=2,
-    backoff_factor=2,
+    max_attempts=3,
+    initial_delay=1,
+    backoff_factor=1,
 )
 async def open_driver_and_reserve(
     proxy, origin, destination, departure_time, seats_to_reserve: list

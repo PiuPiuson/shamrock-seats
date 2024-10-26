@@ -338,7 +338,7 @@ async def get_flight_seat(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return SEATS_SELECTION
 
         await query.edit_message_text(
-            f"Reserving the following seats: {', '.join(selected_seats)}"
+            f"Snatching up every seat apart from {', '.join(selected_seats)}"
         )
 
         # Proceed to the reservation process
@@ -376,6 +376,8 @@ async def start_reservation(
         "It won't take but a moment or two"
     )
 
+    await update.effective_chat.send_action(ChatAction.TYPING)
+
     driver = create_webdriver()
     ra = Ryanair(driver, origin, destination, departure_time)
     proxies = Proxy(PROXY_TOKEN)
@@ -394,6 +396,8 @@ async def start_reservation(
         return await end_conversation(context)
     finally:
         driver.quit()
+
+    await update.effective_chat.send_action(ChatAction.TYPING)
 
     seats_remaining = available_seats.copy()
     for seat in seats_to_reserve:

@@ -3,6 +3,9 @@ import logging
 from datetime import datetime
 import tempfile
 import math
+import asyncio
+from functools import wraps
+
 
 from proxy import Proxy
 
@@ -44,6 +47,65 @@ SELENIUM_URL = os.getenv("SELENIUM_URL")
 
 # States for conversation
 ORIGIN, DESTINATION, TIME, FLIGHT_NUMBER, SEAT = range(5)
+
+
+def retry_async(exceptions, max_attempts=3, initial_delay=1, backoff_factor=2):
+    """Retry decorator with exponential backoff for async functions."""
+
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            delay = initial_delay
+            for attempt in range(max_attempts):
+                try:
+                    return await func(*args, **kwargs)
+                except exceptions as e:
+                    if attempt < max_attempts - 1:
+                        logger.warning(
+                            "Attempt %d failed with error: %s. "
+                            "Retrying in %d seconds...",
+                            attempt + 1,
+                            e,
+                            delay,
+                        )
+                        await asyncio.sleep(delay)
+                        delay *= backoff_factor
+                    else:
+                        logger.error(
+                            "Max attempts reached for %s. Giving up.", func.__name__
+                        )
+                        raise
+
+        return wrapper
+
+    return decorator
+
+
+@retry_async(
+    (
+        FlightNotFoundError,
+        FlightSoldOutError,
+        SeatsNotAvailableError,
+        SeatSelectionError,
+        RyanairScriptError,
+    ),
+    max_attempts=5,
+    initial_delay=2,
+    backoff_factor=2,
+)
+async def open_driver_and_reserve(
+    proxy, origin, destination, departure_time, seats_to_reserve: list
+):
+    """Open a WebDriver, perform seat reservations, and handle errors."""
+
+    driver = create_webdriver(proxy)
+    ra = Ryanair(driver, origin, destination, departure_time)
+
+    try:
+        await asyncio.to_thread(ra.reserve_seats, seats_to_reserve)
+
+    finally:
+        await asyncio.to_thread(driver.quit)
 
 
 def create_webdriver(proxy_ip: str = None):
@@ -289,74 +351,44 @@ async def get_flight_seat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     finally:
         driver.quit()
 
-    drivers_needed = math.ceil(len(available_seats) / available_tickets)
-    logger.info("Need to create %d chrome drivers", drivers_needed)
-
     seats_remaining = available_seats
     seats_remaining.remove(selected_seat)
 
+    drivers_needed = math.ceil(len(seats_remaining) / available_tickets)
+    logger.info("Need to create %d chrome drivers", drivers_needed)
+
     proxy_list = proxies.get_proxy_list()
 
-    # TODO: Open drivers concurrently to minimize time
+    tasks = []
+
     for i in range(drivers_needed):
-        # Calculate progress
-        progress_percentage = i / drivers_needed
-        filled_slots = int(
-            progress_percentage * 10
-        )  # Number of filled emojis (🔲 or ▫️)
-
-        # Build the progress bar
-        progress_bar = "🔲" * filled_slots + "▫️" * (10 - filled_slots)
-        percent_display = int(progress_percentage * 100)
-
-        # Update the message
-        await loading_message.edit_text(
-            f"Reserving seats...\n[{progress_bar}] {percent_display}%"
-        )
-
-        logger.info("Starting session %d", i + 1)
-
-        driver = create_webdriver(proxy_list.pop())
-
-        ra = Ryanair(driver, origin, destination, departure_time)
-
         num_seats_to_reserve = (
             available_tickets
             if len(seats_remaining) >= available_tickets
             else len(seats_remaining)
         )
-
+        seats_to_reserve = seats_remaining[:num_seats_to_reserve]
         logger.info("Session %d needs to reserve %d seats", i + 1, num_seats_to_reserve)
 
-        seats_to_reserve = seats_remaining[:num_seats_to_reserve]
+        proxy = proxy_list.pop()
+        seats_remaining = [
+            seat for seat in seats_remaining if seat not in seats_to_reserve
+        ]
 
-        try:
-            ra.reserve_seats(seats_to_reserve)
+        tasks.append(
+            open_driver_and_reserve(
+                proxy, origin, destination, departure_time, seats_to_reserve
+            )
+        )
 
-            logger.info("Session %d seats reserved", i + 1)
-
-            seats_remaining = [
-                seat for seat in seats_remaining if seat not in seats_to_reserve
-            ]
-
-        except (
-            FlightNotFoundError,
-            FlightSoldOutError,
-            SeatsNotAvailableError,
-            SeatSelectionError,
-        ) as e:
-            logger.error("Flight error in session %d: %s", i + 1, e)
-            # TODO: retry with this agent for a number of times
-        except RyanairScriptError as e:
-            logger.error("Script error in session %d: %s", i + 1, e)
-            # TODO: also retry
-        finally:
-            driver.quit()
+    # Run all the tasks concurrently
+    await asyncio.gather(*tasks)
 
     await loading_message.edit_text("Finished reserving seats.")
     await update.effective_chat.send_message(
         "Check in now with random seat allocation."
     )
+
     return await end_conversation(context)
 
 

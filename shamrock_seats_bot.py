@@ -21,6 +21,7 @@ from telegram.constants import ChatAction
 
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 
 
 from ryanair import (
@@ -47,11 +48,6 @@ SELENIUM_URL = os.getenv("SELENIUM_URL")
 ORIGIN, DESTINATION, TIME, FLIGHT_NUMBER, SEAT = range(5)
 
 
-def is_running_in_docker():
-    """Checks whether the script is running on docker"""
-    return os.path.exists("/.dockerenv")
-
-
 def create_webdriver(proxy_ip: str = None):
     options = webdriver.ChromeOptions()
     options.add_argument("--incognito")
@@ -71,27 +67,17 @@ def create_webdriver(proxy_ip: str = None):
     if proxy_ip:
         options.add_argument(f"--proxy-server=http://{proxy_ip}")
 
-    if not is_running_in_docker():
-        # pylint: disable-next=C0415
-        from webdriver_manager.chrome import ChromeDriverManager
+    driver = webdriver.Chrome(
+        service=Service(ChromeDriverManager().install()), options=options
+    )
 
-        driver = webdriver.Chrome(
-            service=Service(ChromeDriverManager().install()), options=options
-        )
+    user_agents = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36",
+    ]
 
-        user_agents = [
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36",
-        ]
-
-        driver.execute_cdp_cmd(
-            "Network.setUserAgentOverride", {"userAgent": user_agents[0]}
-        )
-
-    else:
-        driver = webdriver.Remote(
-            command_executor=SELENIUM_URL,
-            options=options,
-        )
+    driver.execute_cdp_cmd(
+        "Network.setUserAgentOverride", {"userAgent": user_agents[0]}
+    )
 
     driver.execute_script(
         "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"

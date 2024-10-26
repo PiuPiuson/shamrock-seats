@@ -250,8 +250,7 @@ async def get_flight_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         await update.message.reply_text(
-            "Hold tight, I'm checking the seats for ya... 🛫\n"
-            "It won't take but a moment or two"
+            "Hold tight, I'm checking the seats for ya... 🛫"
         )
         await update.effective_chat.send_action(ChatAction.TYPING)
 
@@ -374,6 +373,7 @@ async def start_reservation(
 
     loading_message = await update.effective_chat.send_message(
         "Right, I'm getting everything sorted for ya... ⏳"
+        "It won't take but a moment or two"
     )
 
     driver = create_webdriver()

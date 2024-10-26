@@ -111,7 +111,10 @@ class Ryanair:
             f"&promoCode="
             f"&isConnectedFlight=false"
         )
-        return base_url + params
+        url = base_url + params
+
+        logger.info("Url for flights: %s", url)
+        return url
 
     def __accept_cookies(self):
         """Accept cookies on the website."""

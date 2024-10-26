@@ -1,22 +1,27 @@
-# Use an official Python image as the base
-FROM python:3.12.5
+FROM python:3.12-slim
 
-# Set the working directory in the container
+# Set the working directory
 WORKDIR /app
 
-# Copy the current directory contents into the container
-COPY . /app
+# Install dependencies including Chrome and ChromeDriver
+RUN apt-get update && apt-get install -y \
+    chromium-driver \
+    chromium \
+    curl \
+    gnupg \
+    unzip \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-# Update apt-get
-RUN apt-get update
-
-# Install Chrome
-RUN curl -LO https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb && \
-    apt-get install -y ./google-chrome-stable_current_amd64.deb && \
-    rm google-chrome-stable_current_amd64.deb
-
-# Install Python dependencies
+# Copy the requirements file and install dependencies
+COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Start the bot script
+# Copy the rest of the application files into the container
+COPY . /app
+
+# Expose the necessary port for Selenium server (default: 4444)
+EXPOSE 4444
+
+# Run the bot script
 CMD ["python", "shamrock_seats_bot.py"]

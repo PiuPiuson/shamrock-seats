@@ -21,8 +21,6 @@ from telegram.constants import ChatAction
 
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-
 
 from ryanair import (
     Ryanair,
@@ -51,6 +49,9 @@ ORIGIN, DESTINATION, TIME, FLIGHT_NUMBER, SEAT = range(5)
 def create_webdriver(proxy_ip: str = None):
     options = webdriver.ChromeOptions()
     options.add_argument("--incognito")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option("useAutomationExtension", False)
@@ -67,9 +68,8 @@ def create_webdriver(proxy_ip: str = None):
     if proxy_ip:
         options.add_argument(f"--proxy-server=http://{proxy_ip}")
 
-    driver = webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()), options=options
-    )
+    service = Service("/usr/bin/chromedriver")
+    driver = webdriver.Chrome(service=service, options=options)
 
     user_agents = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36",
@@ -177,6 +177,13 @@ async def get_flight_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return TIME
 
     if not context.user_data.get("available_seats", None):
+        logger.info(
+            "Getting available seats for %s - %s at %s",
+            context.user_data["origin"],
+            context.user_data["destination"],
+            context.user_data["time"],
+        )
+
         await update.message.reply_text("Looking for available seats. Please wait...")
         await update.effective_chat.send_action(ChatAction.TYPING)
 
@@ -212,6 +219,8 @@ async def get_flight_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
             driver.quit()
 
     available_seats = context.user_data["available_seats"]
+
+    logger.info("%d seats available in the flight", len(available_seats))
 
     if len(available_seats) == 1:
         await update.message.reply_text(

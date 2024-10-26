@@ -153,9 +153,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send a welcome message when the command /start is issued."""
     await update.message.reply_text(
         "Ah, top of the mornin' to ya! 🍀\n\n"
-        "Welcome to ShamrockSeats, where we're as lucky as a four-leaf clover!\n"
+        "Welcome to ShamrockSeats, where you're as lucky as a four-leaf clover!\n"
         "Use /reserve to save yourself a cozy spot on the plane.\n"
-        "If ya change your mind, just type /cancel and we'll sort it out."
+        "If ya change your mind, just type /cancel and I'll sort it out."
     )
 
 
@@ -294,21 +294,26 @@ async def get_flight_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return await end_conversation(context)
 
-    seat_layout = divide_seats_evenly(available_seats)
-
-    # Initialize the list to hold rows of buttons
-    keyboard = []
-
-    for row in seat_layout:
-        button_row = [InlineKeyboardButton(seat, callback_data=seat) for seat in row]
-        keyboard.append(button_row)
-
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
+    reply_markup = create_seats_keyboard_markup(available_seats)
     await update.message.reply_text(
         "Pick a seat there now, don't be shy:", reply_markup=reply_markup
     )
     return SEATS_SELECTION
+
+
+def create_seats_keyboard_markup(available_seats: list[str]):
+    """Creates the markup selection for seats"""
+    seat_layout = divide_seats_evenly(available_seats)
+
+    keyboard = [
+        [InlineKeyboardButton(seat, callback_data=seat) for seat in row]
+        for row in seat_layout
+    ]
+
+    # Add a 'Done' button at the end to finalize the seat selection
+    keyboard.append([InlineKeyboardButton("Done", callback_data="Done")])
+
+    return InlineKeyboardMarkup(keyboard)
 
 
 async def get_flight_seat(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -319,12 +324,16 @@ async def get_flight_seat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Retrieve the selected seat
     selected_seat = query.data
 
+    available_seats = context.user_data.get("available_seats")
+    reply_markup = create_seats_keyboard_markup(available_seats)
+
     # Check if the selected seat is "Done" to finish the selection
     if selected_seat == "Done":
         selected_seats = context.user_data.get("selected_seats", [])
         if not selected_seats:
             await query.edit_message_text(
-                "You haven't selected any seats. Please choose at least one seat."
+                "You haven't selected any seats. Please choose at least one seat.",
+                reply_markup=reply_markup,
             )
             return SEATS_SELECTION
 
@@ -344,41 +353,13 @@ async def get_flight_seat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         selected_seats.sort()
 
     # Update the seat selection message with the chosen seats
-    await query.delete_message()
-
-    # Show the seat selection again
-    return await show_seat_selection(update, context)
-
-
-async def show_seat_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Display seat options including a 'Done' button for confirmation."""
-    available_seats = context.user_data.get("available_seats")
-
-    seat_layout = divide_seats_evenly(available_seats)
-
-    keyboard = [
-        [InlineKeyboardButton(seat, callback_data=seat) for seat in row]
-        for row in seat_layout
-    ]
-
-    # Add a 'Done' button at the end to finalize the seat selection
-    keyboard.append([InlineKeyboardButton("Done", callback_data="Done")])
-
-    reply_markup = InlineKeyboardMarkup(keyboard)
 
     selected_seats = context.user_data.get("selected_seats", [])
-
-    seat_message = (
-        f"Seats selected: {', '.join(selected_seats)}\n\n" if selected_seats else ""
-    )
-
-    # Show the keyboard to the user again
-    await update.effective_message.reply_text(
-        seat_message
-        + "Tap a seat to pick it or put it down, or tap 'Done' when you're all set.",
+    await query.edit_message_text(
+        f"Seats selected: {', '.join(selected_seats)}\n\n"
+        "Tap a seat to pick it or put it down, or tap 'Done' when you're all set.",
         reply_markup=reply_markup,
     )
-    return SEATS_SELECTION
 
 
 async def start_reservation(
@@ -391,7 +372,7 @@ async def start_reservation(
     available_seats = context.user_data["available_seats"]
 
     loading_message = await update.effective_chat.send_message(
-        "Right, we're getting everything sorted for ya... ⏳"
+        "Right, I'm getting everything sorted for ya... ⏳"
     )
 
     driver = create_webdriver()
@@ -456,7 +437,7 @@ async def start_reservation(
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancel the current conversation."""
     await update.message.reply_text(
-        "Ah, no worries at all. We've canceled your seat reservation. Take care, now!"
+        "Ah, no worries at all. I've canceled your seat reservation. Take care, now!"
     )
     return await end_conversation(context)
 

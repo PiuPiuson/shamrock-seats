@@ -362,6 +362,7 @@ async def get_flight_seat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tasks = []
 
     for i in range(drivers_needed):
+        # TODO: Somehow track progress and report back
         num_seats_to_reserve = (
             available_tickets
             if len(seats_remaining) >= available_tickets

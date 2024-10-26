@@ -372,7 +372,7 @@ async def start_reservation(
     available_seats = context.user_data["available_seats"]
 
     loading_message = await update.effective_chat.send_message(
-        "Right, I'm getting everything sorted for ya... ⏳"
+        "Right, I'm getting everything sorted for ya... ⏳\n"
         "It won't take but a moment or two"
     )
 
@@ -432,7 +432,7 @@ async def start_reservation(
     # Run all the tasks concurrently
     await asyncio.gather(*tasks)
 
-    await loading_message.edit_text("All done! Your seats are sorted! 🎟️✨")
+    await loading_message.edit_text("All done! Luck is going to be on your side! 🎟️✨")
     await update.effective_chat.send_message(
         "Time to check in with random seat allocation and get yourself sorted. Safe travels! 🛫"
     )

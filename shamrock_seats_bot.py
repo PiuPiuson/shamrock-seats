@@ -46,7 +46,7 @@ PROXY_TOKEN = os.getenv("PROXY_API_KEY")
 SELENIUM_URL = os.getenv("SELENIUM_URL")
 
 # States for conversation
-ORIGIN, DESTINATION, TIME, FLIGHT_NUMBER, SEAT = range(5)
+ORIGIN, DESTINATION, TIME, SEATS_SELECTION, CONFIRMATION = range(5)
 
 
 def retry_async(exceptions, max_attempts=3, initial_delay=1, backoff_factor=2):
@@ -305,24 +305,86 @@ async def get_flight_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Select your preferred seat:", reply_markup=reply_markup
     )
-    return SEAT
+    return SEATS_SELECTION
 
 
 async def get_flight_seat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Store the seat number and proceed to reserve the seat."""
-    # TODO: Allow multiple seat selection
+    """Allow multiple seat selection and store them."""
     query = update.callback_query
     await query.answer()
 
+    # Retrieve the selected seat
     selected_seat = query.data
-    await query.edit_message_text(
-        f"Reserving every other seat apart from {selected_seat}"
+
+    # Check if the selected seat is "Done" to finish the selection
+    if selected_seat == "Done":
+        selected_seats = context.user_data.get("selected_seats", [])
+        if not selected_seats:
+            await query.edit_message_text(
+                "You haven't selected any seats. Please choose at least one seat."
+            )
+            return SEATS_SELECTION
+
+        await query.edit_message_text(
+            f"Reserving the following seats: {', '.join(selected_seats)}"
+        )
+
+        # Proceed to the reservation process
+        return await start_reservation(update, context, selected_seats)
+
+    # Add or remove the selected seat to the list
+    selected_seats = context.user_data.setdefault("selected_seats", [])
+    if selected_seat in selected_seats:
+        selected_seats.remove(selected_seat)
+    else:
+        selected_seats.append(selected_seat)
+        selected_seats.sort()
+
+    # Update the seat selection message with the chosen seats
+    await query.delete_message()
+
+    # Show the seat selection again
+    return await show_seat_selection(update, context)
+
+
+async def show_seat_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Display seat options including a 'Done' button for confirmation."""
+    available_seats = context.user_data.get("available_seats")
+
+    seat_layout = divide_seats_evenly(available_seats)
+
+    keyboard = [
+        [InlineKeyboardButton(seat, callback_data=seat) for seat in row]
+        for row in seat_layout
+    ]
+
+    # Add a 'Done' button at the end to finalize the seat selection
+    keyboard.append([InlineKeyboardButton("Done", callback_data="Done")])
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    selected_seats = context.user_data.get("selected_seats", [])
+
+    seat_message = (
+        f"Seats selected: {', '.join(selected_seats)}\n\n" if selected_seats else ""
     )
 
-    available_seats = context.user_data["available_seats"]
+    # Show the keyboard to the user again
+    await update.effective_message.reply_text(
+        seat_message + "Tap your preferred seat to select or deselect it",
+        reply_markup=reply_markup,
+    )
+    return SEATS_SELECTION
+
+
+async def start_reservation(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, seats_to_reserve
+):
+    """Initiate the reservation process with the selected seats."""
     origin = context.user_data["origin"]
     destination = context.user_data["destination"]
     departure_time = context.user_data["time"]
+    available_seats = context.user_data["available_seats"]
 
     loading_message = await update.effective_chat.send_message(
         "Starting seat reservation process..."
@@ -330,29 +392,26 @@ async def get_flight_seat(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     driver = create_webdriver()
     ra = Ryanair(driver, origin, destination, departure_time)
-
     proxies = Proxy(PROXY_TOKEN)
 
     try:
         available_tickets = ra.get_number_of_tickets_available()
-
     except (FlightNotFoundError, FlightSoldOutError, SeatsNotAvailableError):
         await loading_message.edit_text(
             "The flight info has changed. Please try again by using /reserve"
         )
         return await end_conversation(context)
-
     except RyanairScriptError:
         await loading_message.edit_text(
             "An internal error has occurred. Please try again by using /reserve"
         )
         return await end_conversation(context)
-
     finally:
         driver.quit()
 
-    seats_remaining = available_seats
-    seats_remaining.remove(selected_seat)
+    seats_remaining = available_seats.copy()
+    for seat in seats_to_reserve:
+        seats_remaining.remove(seat)
 
     drivers_needed = math.ceil(len(seats_remaining) / available_tickets)
     logger.info("Need to create %d chrome drivers", drivers_needed)
@@ -362,34 +421,31 @@ async def get_flight_seat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tasks = []
 
     for i in range(drivers_needed):
-        # TODO: Somehow track progress and report back
         num_seats_to_reserve = (
             available_tickets
             if len(seats_remaining) >= available_tickets
             else len(seats_remaining)
         )
-        seats_to_reserve = seats_remaining[:num_seats_to_reserve]
-        logger.info("Session %d needs to reserve %d seats", i + 1, num_seats_to_reserve)
+        seats_batch = seats_remaining[:num_seats_to_reserve]
+
+        logger.info("Session %d needs to reserve %d seats", i + 1, len(seats_batch))
 
         proxy = proxy_list.pop()
-        seats_remaining = [
-            seat for seat in seats_remaining if seat not in seats_to_reserve
-        ]
+        seats_remaining = seats_remaining[num_seats_to_reserve:]
 
         tasks.append(
             open_driver_and_reserve(
-                proxy, origin, destination, departure_time, seats_to_reserve
+                proxy, origin, destination, departure_time, seats_batch
             )
         )
 
     # Run all the tasks concurrently
     await asyncio.gather(*tasks)
 
-    await loading_message.edit_text("Finished reserving seats.")
+    await loading_message.edit_text("Finished reserving selected seats.")
     await update.effective_chat.send_message(
         "Check in now with random seat allocation."
     )
-
     return await end_conversation(context)
 
 
@@ -420,7 +476,7 @@ if __name__ == "__main__":
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_flight_destination)
             ],
             TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_flight_time)],
-            SEAT: [CallbackQueryHandler(get_flight_seat)],
+            SEATS_SELECTION: [CallbackQueryHandler(get_flight_seat)],
         },
         fallbacks=[
             CommandHandler("cancel", cancel)

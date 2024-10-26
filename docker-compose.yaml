@@ -7,25 +7,5 @@ services:
     environment:
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
       PROXY_API_KEY: "${PROXY_API_KEY}"
-      SELENIUM_URL: "http://selenium:4444/wd/hub"
     volumes:
       - .:/app
-    networks:
-      - botnet
-    depends_on:
-      - selenium
-
-  selenium:
-    image: selenium/standalone-chromium
-    container_name: selenium
-    networks:
-      - botnet
-    ports:
-      - "4444:4444"
-    shm_size: '2gb'
-
-networks:
-  botnet:
-    driver: bridge
-
-    

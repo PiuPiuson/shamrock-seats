@@ -8,7 +8,6 @@ services:
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
       PROXY_API_KEY: "${PROXY_API_KEY}"
       SELENIUM_URL: "http://selenium:4444/wd/hub"
-      DOCKER: true
     volumes:
       - .:/app
     networks:

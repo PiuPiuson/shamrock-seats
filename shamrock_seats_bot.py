@@ -42,10 +42,14 @@ logger = logging.getLogger(__name__)
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 PROXY_TOKEN = os.getenv("PROXY_API_KEY")
 SELENIUM_URL = os.getenv("SELENIUM_URL")
-IS_DOCKER = os.getenv("DOCKER")
 
 # States for conversation
 ORIGIN, DESTINATION, TIME, FLIGHT_NUMBER, SEAT = range(5)
+
+
+def is_running_in_docker():
+    """Checks whether the script is running on docker"""
+    return os.path.exists("/.dockerenv")
 
 
 def create_webdriver(proxy_ip: str = None):
@@ -67,7 +71,8 @@ def create_webdriver(proxy_ip: str = None):
     if proxy_ip:
         options.add_argument(f"--proxy-server=http://{proxy_ip}")
 
-    if not IS_DOCKER:
+    if not is_running_in_docker():
+        # pylint: disable-next=C0415
         from webdriver_manager.chrome import ChromeDriverManager
 
         driver = webdriver.Chrome(

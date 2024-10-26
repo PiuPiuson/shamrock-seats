@@ -250,7 +250,8 @@ async def get_flight_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         await update.message.reply_text(
-            "Hold tight, I'm checking the seats for ya... 🛫"
+            "Hold tight, I'm checking the seats for ya... 🛫\n"
+            "It won't take but a moment or two"
         )
         await update.effective_chat.send_action(ChatAction.TYPING)
 

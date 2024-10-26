@@ -1,7 +1,8 @@
 services:
-  shamrock_seats_bot:
+  shamrockseats:
     build: .
-    container_name: shamrock_seats_bot
+    image: piupiuson/shamrockseats:latest
+    container_name: ShamrockSeats
     restart: always
     environment:
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
@@ -22,7 +23,7 @@ services:
       - botnet
     ports:
       - "4444:4444"
-    shm_size: '4gb'
+    shm_size: '2gb'
 
 networks:
   botnet:

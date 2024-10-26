@@ -248,6 +248,7 @@ async def get_flight_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def get_flight_seat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Store the seat number and proceed to reserve the seat."""
+    # TODO: Allow multiple seat selection
     query = update.callback_query
     await query.answer()
 
@@ -296,6 +297,7 @@ async def get_flight_seat(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     proxy_list = proxies.get_proxy_list()
 
+    # TODO: Open drivers concurrently to minimize time
     for i in range(drivers_needed):
         # Calculate progress
         progress_percentage = i / drivers_needed
@@ -344,10 +346,10 @@ async def get_flight_seat(update: Update, context: ContextTypes.DEFAULT_TYPE):
             SeatSelectionError,
         ) as e:
             logger.error("Flight error in session %d: %s", i + 1, e)
-            # retry with this agent for a number of times
+            # TODO: retry with this agent for a number of times
         except RyanairScriptError as e:
             logger.error("Script error in session %d: %s", i + 1, e)
-            # also retry
+            # TODO: also retry
         finally:
             driver.quit()
 

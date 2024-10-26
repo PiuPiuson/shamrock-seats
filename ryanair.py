@@ -59,7 +59,6 @@ class Ryanair:
         departure_time: str,
     ):
         self.__driver = driver
-        self.__num_passengers = 7
         self.__origin = origin
         self.__destination = destination
         self.__departure_time = departure_time
@@ -84,6 +83,8 @@ class Ryanair:
 
         now = datetime.now()
         today_time = datetime.combine(now.date(), input_time)
+
+        # TODO: If time is < 2.5h in the future go to tomorrow
 
         if today_time > now:
             # Return today's date if the time has not passed
@@ -221,23 +222,38 @@ class Ryanair:
         self.__driver.get(search_url)
 
     def __find_max_tickets_available(self):
-        """Find the maximum number of available seats for the specified flight."""
-        while self.__num_passengers > 0:
-            self.__open_search_page(self.__num_passengers)
+        """Find the maximum number of available seats for the specified flight using binary search logic."""
+        low = 1
+        high = 20
+        max_tickets = 0
+
+        while low <= high:
+            mid = (low + high) // 2
+            self.__open_search_page(mid)
             flight_card = self.__get_flight_card()
+
             if not flight_card:
                 logger.error("Could not find the specified flight.")
-                return None
+                return 0
+
             if self.__is_flight_sold_out(flight_card):
-                self.__num_passengers -= 1
-                logger.info("Reducing passenger count to %d", self.__num_passengers)
-            else:
+                high = mid - 1
                 logger.info(
-                    "Found available seats for %d passengers(s).", self.__num_passengers
+                    "Flight sold out for %d passengers. Trying fewer seats.", mid
                 )
-                return flight_card
+            else:
+                max_tickets = mid
+                low = mid + 1
+                logger.info(
+                    "Seats available for %d passengers. Trying more seats.", mid
+                )
+
+        if max_tickets > 0:
+            logger.info("Maximum number of available seats found: %d", max_tickets)
+            return max_tickets
+
         logger.error("No available seats found.")
-        return None
+        return 0
 
     def __select_flight(self, flight_card):
         """Select the specified flight."""
@@ -481,13 +497,13 @@ class Ryanair:
 
         # Find maximum available tickets
         logger.info("Finding maximum available tickets.")
-        flight_card = self.__find_max_tickets_available()
-        if not flight_card:
+        available_seats = self.__find_max_tickets_available()
+        if not available_seats or available_seats == 0:
             logger.error("No available seats found.")
             raise SeatsNotAvailableError()
 
-        logger.info("There are %d seats available.", self.__num_passengers)
-        return self.__num_passengers
+        logger.info("There are %d seats available.", available_seats)
+        return available_seats
 
     def reserve_seats(self, seats: list):
         """Reserves a list of seats from the flight"""

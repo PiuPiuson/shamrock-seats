@@ -18,10 +18,10 @@ COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application files into the container
-COPY . /app
+COPY ./bot /app
 
 # Expose the necessary port for Selenium server (default: 4444)
 EXPOSE 4444
 
 # Run the bot script
-CMD ["python", "shamrock_seats_bot.py"]
+CMD ["python", "bot/bot.py"]

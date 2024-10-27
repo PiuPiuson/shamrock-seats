@@ -6,9 +6,7 @@ import math
 import asyncio
 from functools import wraps
 
-
 from proxy import Proxy
-
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -34,11 +32,19 @@ from ryanair import (
     SeatSelectionError,
 )
 
+import i18n
+
+i18n.load_path.append("bot/locales")
+i18n.set("locale", "en")
+i18n.set("fallback", "en")
+
+
 # Enable logging
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
 
 # Telegram bot token from environment variable
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -134,7 +140,9 @@ def create_webdriver(proxy_ip: str = None):
     driver = webdriver.Chrome(service=service, options=options)
 
     user_agents = [
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "AppleWebKit/537.36 (KHTML, like Gecko)",
+        "Chrome/108.0.0.0 Safari/537.36",
     ]
 
     driver.execute_cdp_cmd(
@@ -151,19 +159,12 @@ def create_webdriver(proxy_ip: str = None):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send a welcome message when the command /start is issued."""
-    await update.message.reply_text(
-        "Ah, top of the mornin' to ya! 🍀\n\n"
-        "Welcome to ShamrockSeats, where you're as lucky as a four-leaf clover!\n"
-        "Use /reserve to save yourself a cozy spot on the plane.\n"
-        "If ya change your mind, just type /cancel and I'll sort it out."
-    )
+    await update.message.reply_text(i18n.t("messages.start"))
 
 
 async def reserve_seat_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start the seat reservation conversation."""
-    await update.message.reply_text(
-        "Right so, let's get crackin'!\n\nGive us the 3-letter code for where you're flyin' out from (e.g., STN):"
-    )
+    await update.message.reply_text(i18n.t("messages.reserve_start"))
     return ORIGIN
 
 
@@ -171,16 +172,12 @@ async def get_flight_origin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Store the origin and ask for the destination."""
     origin_input = update.message.text.strip().upper()
     if not origin_input.isalpha() or len(origin_input) != 3:
-        await update.message.reply_text(
-            "Now now, that doesn't seem right. Give us a proper 3-letter code (e.g. STN):"
-        )
+        await update.message.reply_text(i18n.t("messages.invalid_origin"))
         return ORIGIN
 
     context.user_data["origin"] = origin_input
 
-    await update.message.reply_text(
-        "Lovely jubbly! Now, where's your final stop? (e.g. OSL):"
-    )
+    await update.message.reply_text(i18n.t("messages.ask_destination"))
     return DESTINATION
 
 
@@ -188,16 +185,12 @@ async def get_flight_destination(update: Update, context: ContextTypes.DEFAULT_T
     """Store the destination and ask for the flight date."""
     destination_input = update.message.text.strip().upper()
     if not destination_input.isalpha() or len(destination_input) != 3:
-        await update.message.reply_text(
-            "Oh, that doesn't look right. Could ya give us a proper 3-letter code? (e.g. OSL):"
-        )
+        await update.message.reply_text(i18n.t("messages.invalid_destination"))
         return DESTINATION
 
     context.user_data["destination"] = destination_input
 
-    await update.message.reply_text(
-        "Grand! And what time does your flight take off? (e.g. 14:30)"
-    )
+    await update.message.reply_text(i18n.t("messages.ask_time"))
     return TIME
 
 
@@ -230,15 +223,15 @@ def divide_seats_evenly(seats, max_rows=4):
 async def get_flight_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Store the flight time and ask for the seat."""
     time_input = update.message.text.strip()
-    # Validate date format
+
+    # Validate time format
     try:
+        # TODO: create a time object and output the proper time to support eg 8:01
         datetime.strptime(time_input, "%H:%M")
         context.user_data["time"] = time_input
 
     except ValueError:
-        await update.message.reply_text(
-            "Ah sure, that time doesn't look right. Give it another go in the format HH:MM:"
-        )
+        await update.message.reply_text(i18n.t("messages.invalid_time"))
         return TIME
 
     if not context.user_data.get("available_seats", None):
@@ -249,9 +242,7 @@ async def get_flight_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["time"],
         )
 
-        await update.message.reply_text(
-            "Hold tight, I'm checking the seats for ya... 🛫"
-        )
+        await update.message.reply_text(i18n.t("messages.checking_seats"))
         await update.effective_chat.send_action(ChatAction.TYPING)
 
         driver = create_webdriver()
@@ -266,20 +257,13 @@ async def get_flight_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["available_seats"] = ra.get_available_seats_in_flight()
 
         except FlightNotFoundError:
-            await update.message.reply_text(
-                "Ah, no luck finding that flight. Maybe try again with /reserve."
-            )
+            await update.message.reply_text(i18n.t("messages.flight_not_found"))
             return await end_conversation(context)
         except FlightSoldOutError:
-            await update.message.reply_text(
-                "Oh dear, looks like the flight's as full as a pub on St. Paddy's Day! 🍻\n"
-                "Try your luck another time."
-            )
+            await update.message.reply_text(i18n.t("messages.flight_sold_out"))
             return await end_conversation(context)
         except RyanairScriptError:
-            await update.message.reply_text(
-                "Oops! Something went a bit wonky on our end. Try again with /reserve."
-            )
+            await update.message.reply_text(i18n.t("messages.script_error"))
             return await end_conversation(context)
         finally:
             driver.quit()
@@ -289,19 +273,17 @@ async def get_flight_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("%d seats available in the flight", len(available_seats))
 
     if len(available_seats) == 1:
-        await update.message.reply_text(
-            "There's only the one seat left, so grab it quick before it disappears!"
-        )
+        await update.message.reply_text(i18n.t("messages.one_seat_left"))
         return await end_conversation(context)
 
     reply_markup = create_seats_keyboard_markup(available_seats)
     await update.message.reply_text(
-        "Pick a seat there now, don't be shy:", reply_markup=reply_markup
+        i18n.t("messages.pick_seat"), reply_markup=reply_markup
     )
     return SEATS_SELECTION
 
 
-def create_seats_keyboard_markup(available_seats: list[str]):
+def create_seats_keyboard_markup(available_seats: list[str], done_button=False):
     """Creates the markup selection for seats"""
     seat_layout = divide_seats_evenly(available_seats)
 
@@ -311,7 +293,10 @@ def create_seats_keyboard_markup(available_seats: list[str]):
     ]
 
     # Add a 'Done' button at the end to finalize the seat selection
-    keyboard.append([InlineKeyboardButton("Done", callback_data="Done")])
+    if done_button:
+        keyboard.append(
+            [InlineKeyboardButton(i18n.t("messages.done_button"), callback_data="done")]
+        )
 
     return InlineKeyboardMarkup(keyboard)
 
@@ -325,20 +310,20 @@ async def get_flight_seat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     selected_seat = query.data
 
     available_seats = context.user_data.get("available_seats")
-    reply_markup = create_seats_keyboard_markup(available_seats)
+    reply_markup = create_seats_keyboard_markup(available_seats, done_button=True)
 
-    # Check if the selected seat is "Done" to finish the selection
-    if selected_seat == "Done":
+    # Check if the selected seat is "done" to finish the selection
+    if selected_seat == "done":
         selected_seats = context.user_data.get("selected_seats", [])
         if not selected_seats:
             await query.edit_message_text(
-                "You haven't selected any seats. Please choose at least one seat.",
+                i18n.t("messages.no_seats_selected"),
                 reply_markup=reply_markup,
             )
             return SEATS_SELECTION
 
         await query.edit_message_text(
-            f"Snatching up every seat apart from {', '.join(selected_seats)}"
+            i18n.t("messages.snatching_seats", selected_seats=", ".join(selected_seats))
         )
 
         # Proceed to the reservation process
@@ -356,8 +341,11 @@ async def get_flight_seat(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     selected_seats = context.user_data.get("selected_seats", [])
     await query.edit_message_text(
-        f"Seats selected: {', '.join(selected_seats)}\n\n"
-        "Tap a seat to pick it or put it down, or tap 'Done' when you're all set.",
+        i18n.t(
+            "messages.seat_selection_instructions",
+            selected_seats=", ".join(selected_seats),
+            done_button=i18n.t("messages.done_button"),
+        ),
         reply_markup=reply_markup,
     )
 
@@ -372,8 +360,7 @@ async def start_reservation(
     available_seats = context.user_data["available_seats"]
 
     loading_message = await update.effective_chat.send_message(
-        "Right, I'm getting everything sorted for ya... ⏳\n"
-        "It won't take but a moment or two"
+        i18n.t("messages.reserving_seats")
     )
 
     await update.effective_chat.send_action(ChatAction.TYPING)
@@ -385,14 +372,10 @@ async def start_reservation(
     try:
         available_tickets = ra.get_number_of_tickets_available()
     except (FlightNotFoundError, FlightSoldOutError, SeatsNotAvailableError):
-        await loading_message.edit_text(
-            "Ah, looks like the flight info changed. Give it another whirl with /reserve."
-        )
+        await loading_message.edit_text(i18n.t("messages.flight_info_changed"))
         return await end_conversation(context)
     except RyanairScriptError:
-        await loading_message.edit_text(
-            "Something went sideways on us. Try again with /reserve."
-        )
+        await loading_message.edit_text(i18n.t("messages.something_wrong"))
         return await end_conversation(context)
     finally:
         driver.quit()
@@ -432,18 +415,14 @@ async def start_reservation(
     # Run all the tasks concurrently
     await asyncio.gather(*tasks)
 
-    await loading_message.edit_text("All done! Luck is going to be on your side! 🎟️✨")
-    await update.effective_chat.send_message(
-        "Time to check in with random seat allocation and get yourself sorted. Safe travels! 🛫"
-    )
+    await loading_message.edit_text(i18n.t("messages.reservation_complete"))
+    await update.effective_chat.send_message(i18n.t("messages.check_in"))
     return await end_conversation(context)
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancel the current conversation."""
-    await update.message.reply_text(
-        "Ah, no worries at all. I've canceled your seat reservation. Take care, now!"
-    )
+    await update.message.reply_text(i18n.t("messages.cancel"))
     return await end_conversation(context)
 
 

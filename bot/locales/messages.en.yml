@@ -1,0 +1,79 @@
+en:
+  start: |
+    Ah, top of the mornin' to ya! 🍀
+
+    Welcome to ShamrockSeats, where you're as lucky as a four-leaf clover!
+    Use /reserve to save yourself a cozy spot on the plane.
+    If ya change your mind, just type /cancel and I'll sort it out.
+
+  reserve_start: |
+    Right so, let's get crackin'!
+
+    Give us the 3-letter code for where you're flyin' out from (e.g., STN):
+
+  invalid_origin: |
+    Now now, that doesn't seem right. Give us a proper 3-letter code (e.g. STN):
+
+  ask_destination: |
+    Lovely jubbly! Now, where's your final stop? (e.g. OSL):
+
+  invalid_destination: |
+    Oh, that doesn't look right. Could ya give us a proper 3-letter code? (e.g. OSL):
+
+  ask_time: |
+    Grand! And what time does your flight take off? (e.g. 14:30):
+
+  invalid_time: |
+    Ah sure, that time doesn't look right. Give it another go in the format HH:MM:
+
+  checking_seats: |
+    Hold tight, I'm checking the seats for ya... 🛫
+
+  one_seat_left: |
+    There's only the one seat left, so grab it quick before it disappears!
+
+  pick_seat: |
+    Pick a seat there now, don't be shy:
+
+  no_seats_selected: |
+    You haven't selected any seats. Please choose at least one seat.
+
+  seat_selection_instructions: |
+    Seats selected: %{selected_seats}
+
+    Tap a seat to pick it or put it down, or tap '%{done_button}' when you're all set.
+
+  snatching_seats: |
+    Snatching up every seat apart from %{selected_seats}
+
+  reserving_seats: |
+    Right, I'm getting everything sorted for ya... ⏳
+    It won't take but a moment or two
+
+  reservation_complete: |
+    All done! Luck is going to be on your side! 🎟️✨
+
+  check_in: |
+    Time to check in with random seat allocation and get yourself sorted. Safe travels! 🛫
+
+  cancel: |
+    Ah, no worries at all. I've canceled your seat reservation. Take care, now!
+
+  flight_not_found: |
+    Ah, no luck finding that flight. Maybe try again with /reserve.
+
+  flight_sold_out: |
+    Oh dear, looks like the flight's as full as a pub on St. Paddy's Day! 🍻
+    Try your luck another time.
+
+  script_error: |
+    Oops! Something went a bit wonky on our end. Try again with /reserve.
+
+  flight_info_changed: |
+    Ah, looks like the flight info changed. 
+    Give it another whirl with /reserve.
+
+  something_wrong: |
+    Something went sideways on us. Try again with /reserve.
+
+  done_button: "Done"

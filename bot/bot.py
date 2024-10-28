@@ -226,10 +226,15 @@ async def get_flight_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Validate time format
     try:
-        # TODO: create a time object and output the proper time to support eg 8:01
-        datetime.strptime(time_input, "%H:%M")
-        context.user_data["time"] = time_input
+        # Preprocess the input to handle formats like '0801'
+        if len(time_input) == 4 and time_input.isdigit():
+            time_input = f"{time_input[:2]}:{time_input[2:]}"
 
+        # Parse the time input and reformat it to always be in "HH:MM"
+        time_object = datetime.strptime(time_input, "%H:%M")
+        formatted_time = time_object.strftime("%H:%M")
+
+        context.user_data["time"] = formatted_time
     except ValueError:
         await update.message.reply_text(i18n.t("messages.invalid_time"))
         return TIME

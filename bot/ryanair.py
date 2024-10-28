@@ -1,9 +1,11 @@
 import logging
 import random
 import string
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List
 import time
+
+import airporttime
 
 from selenium.common.exceptions import (
     NoSuchElementException,
@@ -48,6 +50,10 @@ class SeatSelectionError(RyanairError):
     """Raised when there is an error selecting a seat."""
 
 
+class AirportNotFoundError(RyanairError):
+    """Raised when there is an error selecting a seat."""
+
+
 class Ryanair:
     __TIMEOUT = 40  # Timeout for WebDriverWait
 
@@ -58,6 +64,12 @@ class Ryanair:
         destination: str,
         departure_time: str,
     ):
+        try:
+            airporttime.AirportTime(iata_code=origin)
+            airporttime.AirportTime(iata_code=destination)
+        except TypeError as e:
+            raise AirportNotFoundError from e
+
         self.__driver = driver
         self.__origin = origin
         self.__destination = destination
@@ -77,23 +89,26 @@ class Ryanair:
     def __generate_departure_date(self) -> str:
         """
         Returns today's date or tomorrow's date depending on whether
-        the departure time has passed or not.
+        the departure time has passed or is within 2.5 hours from now,
+        taking into account the airport timezone
         """
         input_time = datetime.strptime(self.__departure_time, "%H:%M").time()
 
-        now = datetime.now()
-        today_time = datetime.combine(now.date(), input_time)
+        utc_now = datetime.now(timezone.utc)
+        departure_datetime = datetime.combine(datetime.now().date(), input_time)
 
-        # TODO: If time is < 2.5h in the future go to tomorrow
+        # Convert departure time to UTC
+        apt = airporttime.AirportTime(iata_code=self.__origin)
+        utc_departure_time = apt.to_utc(departure_datetime)
 
-        if today_time > now:
-            # Return today's date if the time has not passed
-            departure_date = now.strftime("%Y-%m-%d")
-
-        else:
-            # Return tomorrow's date if the time has passed
-            tomorrow = now + timedelta(days=1)
+        # Check if the time is within the next 2.5 hours
+        if utc_departure_time < utc_now + timedelta(hours=2.5):
+            # If the time is within 2.5 hours from now, set departure to tomorrow
+            tomorrow = utc_now + timedelta(days=1)
             departure_date = tomorrow.strftime("%Y-%m-%d")
+        else:
+            # Otherwise, set departure to today
+            departure_date = utc_now.strftime("%Y-%m-%d")
 
         logger.info("Setting departure date to %s", departure_date)
         return departure_date

@@ -6,6 +6,8 @@ import math
 import asyncio
 from functools import wraps
 
+import airporttime
+
 from proxy import Proxy
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -39,7 +41,6 @@ i18n.set("locale", "en")
 i18n.set("fallback", "en")
 
 
-# Enable logging
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
@@ -171,8 +172,15 @@ async def reserve_seat_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def get_flight_origin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Store the origin and ask for the destination."""
     origin_input = update.message.text.strip().upper()
+
     if not origin_input.isalpha() or len(origin_input) != 3:
         await update.message.reply_text(i18n.t("messages.invalid_origin"))
+        return ORIGIN
+
+    try:
+        airporttime.AirportTime(origin_input)
+    except TypeError:
+        await update.message.reply_text(i18n.t("messages.invalid_airport_code"))
         return ORIGIN
 
     context.user_data["origin"] = origin_input
@@ -184,9 +192,16 @@ async def get_flight_origin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def get_flight_destination(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Store the destination and ask for the flight date."""
     destination_input = update.message.text.strip().upper()
+
     if not destination_input.isalpha() or len(destination_input) != 3:
         await update.message.reply_text(i18n.t("messages.invalid_destination"))
         return DESTINATION
+
+    try:
+        airporttime.AirportTime(destination_input)
+    except TypeError:
+        await update.message.reply_text(i18n.t("messages.invalid_airport_code"))
+        return ORIGIN
 
     context.user_data["destination"] = destination_input
 
@@ -343,7 +358,6 @@ async def get_flight_seat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         selected_seats.sort()
 
     # Update the seat selection message with the chosen seats
-
     selected_seats = context.user_data.get("selected_seats", [])
     await query.edit_message_text(
         i18n.t(

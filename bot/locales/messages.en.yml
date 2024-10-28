@@ -26,7 +26,14 @@ en:
     Give me the 3-letter code of your arrival airport (e.g., JFK):
 
   invalid_destination: |
-    Whoops! That doesn't seem correct. 🧐 I need a valid 3-letter airport code, like JFK for New York:
+    Whoops! That doesn't seem correct. 🧐 
+
+    I need a valid 3-letter airport code, like JFK for New York:
+
+  invalid_airport_code: |
+    The airport code you entered doesn't exist.
+
+    Let's try again shall we?
 
   ask_time: |
     Brilliant! ⏰ What time's your flight leavin'? 

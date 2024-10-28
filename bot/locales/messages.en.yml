@@ -1,79 +1,108 @@
 en:
   start: |
-    Ah, top of the mornin' to ya! 🍀
+    Top o' the mornin' to ya! 🍀
 
-    Welcome to ShamrockSeats, where you're as lucky as a four-leaf clover!
-    Use /reserve to save yourself a cozy spot on the plane.
-    If ya change your mind, just type /cancel and I'll sort it out.
+    Welcome to ShamrockSeats! I'm here to tweak Lady Luck in your favor. 🍀✨
+
+    With a wee bit of leprechaun magic, I'll reserve every other seat on the plane, so when you check in, you'll "randomly" get that seat you fancy! 😉💺
+
+    Type /reserve to start, or /cancel if you've had a change of heart. Let's put a twist on your fortune! ☘️
+
+    Just a heads-up: This magic only works on flights open for check-in — that's from 24 hours to 2.5 hours before departure! 🕒✈️
 
   reserve_start: |
-    Right so, let's get crackin'!
+    Right so! Let's get this craic started! 🎉
 
-    Give us the 3-letter code for where you're flyin' out from (e.g., STN):
+    What's the 3-letter code of the airport you're flyin' out from? (e.g., DUB):
 
   invalid_origin: |
-    Now now, that doesn't seem right. Give us a proper 3-letter code (e.g. STN):
+    Ah, that's not quite right! 🤔 
+
+    Could ya give me a valid 3-letter airport code? Think DUB for Dublin:
 
   ask_destination: |
-    Lovely jubbly! Now, where's your final stop? (e.g. OSL):
+    Grand! Now, where's the end of your rainbow? 🌈 
+
+    Give me the 3-letter code of your arrival airport (e.g., JFK):
 
   invalid_destination: |
-    Oh, that doesn't look right. Could ya give us a proper 3-letter code? (e.g. OSL):
+    Whoops! That doesn't seem correct. 🧐 I need a valid 3-letter airport code, like JFK for New York:
 
   ask_time: |
-    Grand! And what time does your flight take off? (e.g. 14:30):
+    Brilliant! ⏰ What time's your flight leavin'? 
+    Use the 24-hour format (e.g., 14:30):
 
   invalid_time: |
-    Ah sure, that time doesn't look right. Give it another go in the format HH:MM:
+    Hmm, that time doesn't look proper! 🕒 
+    Let's try again using HH:MM format, like 14:30:
 
   checking_seats: |
-    Hold tight, I'm checking the seats for ya... 🛫
+    Hold onto your lucky charms! 🌟 
+    I'm checking for open seats...
 
   one_seat_left: |
-    There's only the one seat left, so grab it quick before it disappears!
+    Well, kiss the Blarney Stone! Only one seat left unreserved! 
+    Grab it quick before it disappears! 🎟️
 
   pick_seat: |
-    Pick a seat there now, don't be shy:
+    I'm about to sprinkle some Irish luck on your flight! 🍀✨
+    I'll reserve every other seat, so you'll "randomly" get a better one when you check in! 😉
+
+    Where do you fancy seatin'?
 
   no_seats_selected: |
     You haven't selected any seats. Please choose at least one seat.
 
   seat_selection_instructions: |
-    Seats selected: %{selected_seats}
+    Seats you'd like me to leave be: %{selected_seats}
 
-    Tap a seat to pick it or put it down, or tap '%{done_button}' when you're all set.
+    If there's any other seats you'd rather I leave alone (perhaps for a friend or a wee leprechaun), tap to select/deselect them. 
+
+    Otherwise, tap '%{done_button}' and we'll be off! 🛫
 
   snatching_seats: |
-    Snatching up every seat apart from %{selected_seats}
+    Brilliant! I'll reserve every other seat except for %{selected_seats}! 
+    Time to fiddle with fate! 🍀✨
 
   reserving_seats: |
-    Right, I'm getting everything sorted for ya... ⏳
-    It won't take but a moment or two
+    Casting a charm or two... ⏳✨ 
+
+    This won't take longer than a jig at a ceilidh! (1-2 mins)
 
   reservation_complete: |
-    All done! Luck is going to be on your side! 🎟️✨
+    All done! May the road rise up to meet ya, and may you get the seat you fancy! 🎉🍀
 
   check_in: |
-    Time to check in with random seat allocation and get yourself sorted. Safe travels! 🛫
+    Check in now with random seat allocation, you'll find Lady Luck has been kind! 
+
+    Safe travels, and may the wind be at your back! 🛫🍀
 
   cancel: |
-    Ah, no worries at all. I've canceled your seat reservation. Take care, now!
+    No bother at all! I've canceled the magic. 
+    If you change your mind, I'll be here, sippin' me tea! ☕️
+    Use /reserve to summon me again
 
   flight_not_found: |
-    Ah, no luck finding that flight. Maybe try again with /reserve.
+    Hmm, can't seem to find that flight. 🧐
+
+    Is your flight within the check-in window (24h - 2.5h before departure)? The magic only works during that time! ⏳✨
+
+    Maybe check your details and give it another whirl with /reserve.
 
   flight_sold_out: |
-    Oh dear, looks like the flight's as full as a pub on St. Paddy's Day! 🍻
-    Try your luck another time.
+    Oh dear! That flight's busier than a Dublin pub on a Friday night! 🍻 
+    Try a different flight or time, perhaps?
 
   script_error: |
-    Oops! Something went a bit wonky on our end. Try again with /reserve.
+    Well, that's odd! Something went awry on our end. 
+    Care to give it another go with /reserve? 😅
 
   flight_info_changed: |
-    Ah, looks like the flight info changed. 
-    Give it another whirl with /reserve.
+    Looks like the flight details have shifted like the Irish weather! 🌦️ 
+    Let's start fresh with /reserve.
 
   something_wrong: |
-    Something went sideways on us. Try again with /reserve.
+    That didn't go as planned! 
+    Let's try again with /reserve and see if the luck o' the Irish is with us! 🤞
 
-  done_button: "Done"
+  done_button: "All Set!"

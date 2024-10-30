@@ -24,4 +24,4 @@ COPY ./bot /app
 EXPOSE 4444
 
 # Run the bot script
-CMD ["python", "bot/bot.py"]
+CMD ["python", "bot.py"]

@@ -36,7 +36,7 @@ from ryanair import (
 
 import i18n
 
-i18n.load_path.append("bot/locales")
+i18n.load_path.append("locales")
 i18n.set("locale", "en")
 i18n.set("fallback", "en")
 

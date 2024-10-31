@@ -7,5 +7,3 @@ services:
     environment:
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
       PROXY_API_KEY: "${PROXY_API_KEY}"
-    volumes:
-      - .:/app

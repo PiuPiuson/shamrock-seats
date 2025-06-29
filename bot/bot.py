@@ -52,6 +52,8 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 PROXY_TOKEN = os.getenv("PROXY_API_KEY")
 SELENIUM_URL = os.getenv("SELENIUM_URL")
 
+proxies = Proxy(PROXY_TOKEN)
+
 # States for conversation
 ORIGIN, DESTINATION, TIME, SEATS_SELECTION, CONFIRMATION = range(5)
 
@@ -101,11 +103,11 @@ def retry_async(exceptions, max_attempts=3, initial_delay=1, backoff_factor=2):
     backoff_factor=1,
 )
 async def open_driver_and_reserve(
-    proxy, origin, destination, departure_time, seats_to_reserve: list
+    origin, destination, departure_time, seats_to_reserve: list
 ):
     """Open a WebDriver, perform seat reservations, and handle errors."""
 
-    driver = create_webdriver(proxy)
+    driver = create_webdriver()
     ra = Ryanair(driver, origin, destination, departure_time)
 
     try:
@@ -115,7 +117,7 @@ async def open_driver_and_reserve(
         await asyncio.to_thread(driver.quit)
 
 
-def create_webdriver(proxy_ip: str = None):
+def create_webdriver():
     options = webdriver.ChromeOptions()
     options.add_argument("--incognito")
     options.add_argument("--no-sandbox")
@@ -138,8 +140,8 @@ def create_webdriver(proxy_ip: str = None):
     user_data_dir = tempfile.mkdtemp()
     options.add_argument(f"--user-data-dir={user_data_dir}")
 
-    if proxy_ip:
-        options.add_argument(f"--proxy-server=http://{proxy_ip}")
+    proxy = proxies.get()
+    options.add_argument(f"--proxy-server=http://{proxy}")
 
     # Allow overriding the Chromedriver path via the CHROMEDRIVER_PATH env var
     chromedriver_path = os.getenv("CHROMEDRIVER_PATH", "/usr/bin/chromedriver")
@@ -161,11 +163,15 @@ def create_webdriver(proxy_ip: str = None):
     )
     driver.set_window_size(1280, 1280)
 
+    logger.info("Created webdriver with proxy %s", proxy)
+
     return driver
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send a welcome message when the command /start is issued."""
+    # Refresh the proxy list to get the latest proxies
+    proxies.refresh()
     await update.message.reply_text(i18n.t("messages.start"))
 
 
@@ -392,7 +398,6 @@ async def start_reservation(
 
     driver = create_webdriver()
     ra = Ryanair(driver, origin, destination, departure_time)
-    proxies = Proxy(PROXY_TOKEN)
 
     try:
         available_tickets = ra.get_number_of_tickets_available()
@@ -428,13 +433,10 @@ async def start_reservation(
 
         logger.info("Session %d needs to reserve %d seats", i + 1, len(seats_batch))
 
-        proxy = proxy_list.pop()
         seats_remaining = seats_remaining[num_seats_to_reserve:]
 
         tasks.append(
-            open_driver_and_reserve(
-                proxy, origin, destination, departure_time, seats_batch
-            )
+            open_driver_and_reserve(origin, destination, departure_time, seats_batch)
         )
 
     # Run all the tasks concurrently

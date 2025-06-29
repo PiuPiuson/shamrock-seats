@@ -1,11 +1,17 @@
 import logging
 import random
+import time
+from typing import Dict
 import requests
 
 logger = logging.getLogger(__name__)
 
 
 class Proxy:
+    # Mapping from proxy string ("host:port") to last-used timestamp (float). A value of
+    # ``0`` means the proxy has never been used before.
+    __proxies: Dict[str, float] = {}
+
     def __init__(self, api_key):
         self.__headers = {"Authorization": f"Token {api_key}"}
 
@@ -67,7 +73,7 @@ class Proxy:
         if response.status_code != 201:
             raise requests.HTTPError(f"Could not authorize IP for proxy: {response}")
 
-    def get_proxy_list(self):
+    def refresh(self):
         logger.info("Getting proxy list")
 
         response = requests.get(
@@ -83,4 +89,33 @@ class Proxy:
         random.shuffle(proxies)
 
         logger.info("Got %d proxies", len(proxies))
-        return proxies
+
+        proxy_set = set(proxies)
+
+        proxy_store = self.__class__.__proxies  # mutate class-level store
+
+        # Add new proxies with a last_used timestamp of 0 (never used).
+        for proxy in proxy_set - set(proxy_store):
+            proxy_store[proxy] = 0.0
+
+        # Remove proxies that are no longer present in the refreshed list.
+        for proxy in list(proxy_store.keys()):
+            if proxy not in proxy_set:
+                del proxy_store[proxy]
+
+    def get(self):
+        proxy_store = self.__class__.__proxies
+
+        if not proxy_store:
+            self.refresh()
+
+        # Re-fetch after potential refresh
+        proxy_store = self.__class__.__proxies
+
+        # Select the proxy that was used least recently.
+        proxy = min(proxy_store, key=proxy_store.get)
+
+        # Update its last-used timestamp to now.
+        proxy_store[proxy] = time.time()
+
+        return proxy

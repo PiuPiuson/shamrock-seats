@@ -406,28 +406,59 @@ class Ryanair:
             WebDriverWait(self.__driver, self.__TIMEOUT).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, ".seatmap__seat"))
             )
+            logger.info("Seatmap loaded.")
         except TimeoutException as e:
             logger.error("Seatmap did not load in time: %s", e)
             raise RyanairScriptError(f"Timeout while loading seat map: {e}", e) from e
 
     def __get_available_seats_from_seatmap(self) -> List[str]:
-        """Get a list of available seat IDs."""
-        seats = self.__driver.find_elements(
-            By.CSS_SELECTOR,
-            (
-                "button.seatmap__seat--priority, button.seatmap__seat--standard, button.seatmap__seat--extraleg"
-            ),
-        )
-        available_seats = []
+        """Get a list of available seat IDs. If the number of seats returned is unexpectedly high
+        (greater than 120), the fetch will be repeated up to three times as the seat-map can sometimes
+        return transient or duplicate results on the first attempt."""
 
-        for seat in seats:
-            seat_id = seat.get_attribute("id")
-            if seat_id:
-                available_seats.append(seat_id)
+        MAX_EXPECTED_SEATS = 120
+        MAX_RETRIES = 3
 
-        logger.info(available_seats)
+        attempt = 0
+        seats_cleaned: list[str] = []
 
-        return [seat.replace("seat-", "") for seat in available_seats]
+        time.sleep(5)
+
+        while attempt < MAX_RETRIES:
+            available_seats: list[str] = []
+
+            seats = self.__driver.find_elements(
+                By.CSS_SELECTOR,
+                (
+                    "button.seatmap__seat--priority, button.seatmap__seat--standard, button.seatmap__seat--extraleg"
+                ),
+            )
+
+            for seat in seats:
+                seat_id = seat.get_attribute("id")
+                if seat_id:
+                    available_seats.append(seat_id.replace("seat-", ""))
+
+            if len(available_seats) <= MAX_EXPECTED_SEATS:
+                seats_cleaned = available_seats
+                break
+
+            # If we reach here the seat count is higher than expected; retry
+            logger.info(
+                "Seat fetch attempt %d returned %d seats (> %d). Retrying.",
+                attempt + 1,
+                len(available_seats),
+                MAX_EXPECTED_SEATS,
+            )
+
+            attempt += 1
+            time.sleep(1)
+
+        # In case every retry still exceeds the threshold, return the last collected result
+        if not seats_cleaned:
+            seats_cleaned = available_seats
+
+        return seats_cleaned
 
     def __select_seats(self, seats: list[str]):
         """Select seats from seatmap"""

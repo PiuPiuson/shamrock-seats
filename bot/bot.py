@@ -112,9 +112,10 @@ async def open_driver_and_reserve(
 
     try:
         await asyncio.to_thread(ra.reserve_seats, seats_to_reserve)
-
-    finally:
-        await asyncio.to_thread(driver.quit)
+    except Exception as e:
+        logger.error("Error reserving seats: %s", e)
+    # finally:
+    #     await asyncio.to_thread(driver.quit)
 
 
 def create_webdriver():

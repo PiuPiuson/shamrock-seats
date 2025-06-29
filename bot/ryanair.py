@@ -137,7 +137,7 @@ class Ryanair:
         try:
             accept_button = WebDriverWait(self.__driver, self.__TIMEOUT).until(
                 EC.element_to_be_clickable(
-                    (By.CSS_SELECTOR, '[data-ref="cookie.no-thanks"]')
+                    (By.CSS_SELECTOR, '[data-ref="cookie.accept-all"]')
                 )
             )
             accept_button.click()
@@ -148,6 +148,18 @@ class Ryanair:
             ElementClickInterceptedException,
         ) as e:
             logger.warning("Cookie acceptance failed: %s", e)
+
+    def __is_cookie_popup_open(self):
+        """Check if the cookie popup is open."""
+        try:
+            WebDriverWait(self.__driver, 3).until(
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, '[data-ref="cookie.accept-all"]')
+                )
+            )
+            return True
+        except:
+            return False
 
     def __flights_exist(self) -> bool:
         """Check if flights exist with the given parameters."""
@@ -401,13 +413,19 @@ class Ryanair:
     def __get_available_seats_from_seatmap(self) -> List[str]:
         """Get a list of available seat IDs."""
         seats = self.__driver.find_elements(
-            By.CSS_SELECTOR, ".seatmap__seat:not([class*='unavailable'])"
+            By.CSS_SELECTOR,
+            (
+                "button.seatmap__seat--priority, button.seatmap__seat--standard, button.seatmap__seat--extraleg"
+            ),
         )
         available_seats = []
+
         for seat in seats:
             seat_id = seat.get_attribute("id")
             if seat_id:
                 available_seats.append(seat_id)
+
+        logger.info(available_seats)
 
         return [seat.replace("seat-", "") for seat in available_seats]
 
@@ -497,6 +515,9 @@ class Ryanair:
         if self.__is_select_baggage_page():
             self.__complete_baggage_page()
 
+        if self.__is_cookie_popup_open():
+            self.__accept_cookies()
+
         self.__wait_for_seatmap()
 
         available_seats = self.__get_available_seats_from_seatmap()
@@ -549,6 +570,9 @@ class Ryanair:
 
         if self.__is_select_baggage_page():
             self.__complete_baggage_page()
+
+        if self.__is_cookie_popup_open():
+            self.__accept_cookies()
 
         self.__wait_for_seatmap()
         available_seats = self.__get_available_seats_from_seatmap()

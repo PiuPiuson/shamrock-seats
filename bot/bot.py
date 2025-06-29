@@ -419,8 +419,6 @@ async def start_reservation(
     drivers_needed = math.ceil(len(seats_remaining) / available_tickets)
     logger.info("Need to create %d chrome drivers", drivers_needed)
 
-    proxy_list = proxies.get_proxy_list()
-
     tasks = []
 
     for i in range(drivers_needed):

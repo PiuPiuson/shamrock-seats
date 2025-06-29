@@ -129,7 +129,11 @@ def create_webdriver(proxy_ip: str = None):
     options.add_experimental_option(
         "prefs", {"profile.managed_default_content_settings.images": 2}
     )
-    options.add_argument("--headless=new")
+
+    # Toggle headless mode based on the HEADLESS environment variable (default: on)
+    headless = os.getenv("HEADLESS", "1").lower() in ("1", "true", "yes")
+    if headless:
+        options.add_argument("--headless=new")
 
     user_data_dir = tempfile.mkdtemp()
     options.add_argument(f"--user-data-dir={user_data_dir}")
@@ -137,7 +141,9 @@ def create_webdriver(proxy_ip: str = None):
     if proxy_ip:
         options.add_argument(f"--proxy-server=http://{proxy_ip}")
 
-    service = Service("/usr/bin/chromedriver")
+    # Allow overriding the Chromedriver path via the CHROMEDRIVER_PATH env var
+    chromedriver_path = os.getenv("CHROMEDRIVER_PATH", "/usr/bin/chromedriver")
+    service = Service(chromedriver_path)
     driver = webdriver.Chrome(service=service, options=options)
 
     user_agents = [

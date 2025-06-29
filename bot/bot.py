@@ -458,6 +458,25 @@ async def end_conversation(context):
     return ConversationHandler.END
 
 
+# FIRST_EDIT: register a global error handler for the bot
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+    """Handle all uncaught errors.
+
+    Logs the traceback and, when possible, notifies the user with a generic
+    error message so they know something went wrong instead of seeing nothing.
+    """
+    # Log the full traceback of the error.
+    logger.error("Exception while handling an update:", exc_info=context.error)
+
+    # Gracefully inform the user, if possible.
+    try:
+        if isinstance(update, Update) and update.effective_message:
+            await update.effective_message.reply_text(i18n.t("messages.something_wrong"))
+    except Exception:
+        # If we cannot send a message (e.g. because the chat was closed), just ignore.
+        pass
+
+
 if __name__ == "__main__":
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
 
@@ -482,6 +501,8 @@ if __name__ == "__main__":
     # Add command handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(conv_handler)
+    # SECOND_EDIT: register the error handler so uncaught exceptions are handled gracefully
+    application.add_error_handler(error_handler)
 
     # Run the bot
     application.run_polling()

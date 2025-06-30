@@ -103,19 +103,40 @@ class Proxy:
             if proxy not in proxy_set:
                 del proxy_store[proxy]
 
+    def _can_access_ryanair(self, proxy: str, timeout: int = 5) -> bool:
+        """Return True if the given proxy can successfully fetch Ryanair's homepage.
+
+        A very small GET request is issued to https://www.ryanair.com via the
+        supplied proxy.  If the request succeeds with a < 400 status code we
+        assume the proxy is usable, otherwise it is considered broken.
+        """
+        test_url = "https://www.ryanair.com"
+        proxies = {"http": f"http://{proxy}", "https": f"http://{proxy}"}
+
+        try:
+            response = requests.get(test_url, proxies=proxies, timeout=timeout)
+            if response.status_code < 400:
+                return True
+            logger.info("Proxy %s returned status %s when probing %s", proxy, response.status_code, test_url)
+        except requests.RequestException as exc:
+            logger.info("Proxy %s failed connectivity test: %s", proxy, exc)
+        return False
+
     def get(self):
         proxy_store = self.__class__.__proxies
 
+        # Ensure we have at least one proxy to start with.
         if not proxy_store:
             self.refresh()
 
-        # Re-fetch after potential refresh
-        proxy_store = self.__class__.__proxies
+        while len(proxy_store) > 0:
+            # Pick the least-recently-used proxy first.
+            proxy = min(proxy_store, key=proxy_store.get)
+            proxy_store[proxy] = time.time()
 
-        # Select the proxy that was used least recently.
-        proxy = min(proxy_store, key=proxy_store.get)
+            if self._can_access_ryanair(proxy):
+                return proxy
 
-        # Update its last-used timestamp to now.
-        proxy_store[proxy] = time.time()
-
-        return proxy
+            # Proxy failed – remove it and try the next one.
+            logger.info("Removing unreachable proxy %s from pool", proxy)
+            del proxy_store[proxy]
